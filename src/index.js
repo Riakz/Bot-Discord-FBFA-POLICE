@@ -113,7 +113,7 @@ async function getUsernameById(client, userId) {
 
 const PAGE_SIZE = 10;
 async function buildBlEmbed(client, page = 0) {
-  const bl    = getBlacklist();
+  const bl = getBlacklist();
   const total = bl.length;
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const p = Math.min(Math.max(0, page), pages - 1);
@@ -197,12 +197,12 @@ client.on('interactionCreate', async (interaction) => {
     if (!interaction.guild) return;
 
     if (interaction.isChatInputCommand()) {
-      if (interaction.commandName === 'antidouble')     return handleAntidouble(interaction);
+      if (interaction.commandName === 'antidouble') return handleAntidouble(interaction);
       if (interaction.commandName === 'depart-watcher') return handleDepartWatcher(interaction);
-      if (interaction.commandName === 'mirror')         return handleMirror(interaction);
+      if (interaction.commandName === 'mirror') return handleMirror(interaction);
 
       if (interaction.commandName === 'reserver-pa') return handleReserverPA(interaction);
-      if (interaction.commandName === 'annuler-pa')  return handleAnnulerPA(interaction);
+      if (interaction.commandName === 'annuler-pa') return handleAnnulerPA(interaction);
       if (interaction.commandName === 'planning-pa') return handlePlanningPA(interaction);
 
       if (interaction.commandName === 'candidature-panel') {
@@ -1720,7 +1720,7 @@ setInterval(async () => {
     for (const [, guild] of client.guilds.cache) {
       try {
         const g = await client.guilds.fetch(guild.id);
-        await g.members.unban(entry.id, 'Blacklist expirée').catch(() => {});
+        await g.members.unban(entry.id, 'Blacklist expirée').catch(() => { });
       } catch { }
     }
     log(`[AutoUnban] ${entry.id} débanni — blacklist expirée`);

@@ -9,11 +9,11 @@ const __dirname = path.dirname(__filename);
 const CONFIG_FILE = path.join(__dirname, '..', '..', 'data', 'candidature-config.json');
 
 export const DISTRICTS = {
-  mission_row:  'Mission Row',
-  vespucci:     'Vespucci',
-  alta:         'Alta',
+  mission_row: 'Mission Row',
+  vespucci: 'Vespucci',
+  alta: 'Alta',
   sandy_shores: 'Sandy Shores',
-  roxwood:      'Roxwood',
+  roxwood: 'Roxwood',
 };
 
 export function districtSlugFromLabel(label) {
@@ -25,8 +25,8 @@ function defaultGuildConfig() {
   for (const key of Object.keys(DISTRICTS)) {
     districts[key] = {
       applicationChannelId: null,
-      resultChannelId:      null,
-      acceptedRoleId:       null,
+      resultChannelId: null,
+      acceptedRoleId: null,
     };
   }
   return { globalRefusedRoleId: null, reviewerRoleIds: [], districts };
