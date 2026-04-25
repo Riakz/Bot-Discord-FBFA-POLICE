@@ -6,7 +6,7 @@ import { log, error } from './logger.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const CONFIG_FILE = path.join(__dirname, '..', 'data', 'candidature-config.json');
+const CONFIG_FILE = path.join(__dirname, '..', '..', 'data', 'candidature-config.json');
 
 export const DISTRICTS = {
   mission_row:  'Mission Row',

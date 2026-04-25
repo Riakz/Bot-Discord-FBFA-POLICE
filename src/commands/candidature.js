@@ -62,7 +62,7 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
-const DECISIONS_FILE = path.join(__dirname, '..', 'data', 'candidature-decisions.json');
+const DECISIONS_FILE = path.join(__dirname, '..', '..', 'data', 'candidature-decisions.json');
 
 let decisions = {};
 

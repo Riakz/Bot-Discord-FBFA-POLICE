@@ -5,7 +5,7 @@ import { log, error } from './logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-export const BLACKLIST_FILE = path.join(__dirname, '..', 'data', 'blacklist.json');
+export const BLACKLIST_FILE = path.join(__dirname, '..', '..', 'data', 'blacklist.json');
 
 let blacklist = [];
 

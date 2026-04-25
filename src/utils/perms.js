@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const dataDir = join(__dirname, '..', 'data');
+const dataDir = join(__dirname, '..', '..', 'data');
 const adminsPath = join(dataDir, 'admins.json');
 
 let admins = new Set();

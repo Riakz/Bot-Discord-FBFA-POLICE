@@ -6,9 +6,9 @@ import { log, error } from './logger.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PANELS_FILE = path.join(__dirname, '..', 'data', 'custom-panels.json');
+const PANELS_FILE = path.join(__dirname, '..', '..', 'data', 'custom-panels.json');
 
-const dataDir = path.join(__dirname, '..', 'data');
+const dataDir = path.join(__dirname, '..', '..', 'data');
 if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
 }

@@ -5,7 +5,7 @@ import { error } from './logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const DATA_FILE = path.join(__dirname, '..', 'data', 'antidouble-config.json');
+const DATA_FILE = path.join(__dirname, '..', '..', 'data', 'antidouble-config.json');
 
 let config = {
   alertChannelId: null,
