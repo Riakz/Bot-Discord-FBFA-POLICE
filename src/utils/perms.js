@@ -18,7 +18,10 @@ export function registerPermsStore() {
     const raw = readFileSync(adminsPath, 'utf-8');
     const parsed = JSON.parse(raw);
     admins = new Set(parsed.admins || []);
+    console.log(`[BOT] Admins chargés : ${admins.size} (${Array.from(admins).join(', ')})`);
+    console.log(`[BOT] Chemin admins : ${adminsPath}`);
   } catch (e) {
+    console.error(`[BOT][ERROR] Erreur chargement admins : ${e.message}`);
     admins = new Set();
   }
 }
