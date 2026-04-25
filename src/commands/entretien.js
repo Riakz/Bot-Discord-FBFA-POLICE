@@ -57,8 +57,8 @@ const ENTRETIEN_GIFS = {
 function hasReviewerRole(interaction) {
   const cfg = getEntretienConfig(interaction.guild.id);
   const ids  = cfg.reviewerRoleIds ?? [];
-  if (ids.length === 0) return true;
-  return ids.some(id => interaction.member.roles.cache.has(id));
+  if (ids.length === 0) return isAdmin(interaction.user.id);
+  return ids.some(id => interaction.member.roles.cache.has(id)) || isAdmin(interaction.user.id);
 }
 
 function buildEntretienButtons(district, disabled = false) {

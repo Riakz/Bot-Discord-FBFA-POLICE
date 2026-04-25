@@ -112,8 +112,8 @@ const LOGO_PA = 'https://media.discordapp.net/attachments/1447042636279189615/14
 function hasReviewerRole(interaction) {
   const cfg = getCandidatureConfig(interaction.guild.id);
   const ids  = cfg.reviewerRoleIds ?? [];
-  if (ids.length === 0) return true;
-  return ids.some(id => interaction.member.roles.cache.has(id));
+  if (ids.length === 0) return isAdmin(interaction.user.id);
+  return ids.some(id => interaction.member.roles.cache.has(id)) || isAdmin(interaction.user.id);
 }
 
 function buildDecisionButtons(messageId, status = 'pending') {
