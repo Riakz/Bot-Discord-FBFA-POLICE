@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(sort -u echo \"---\" grep -oh \"process\\\\.env\\\\.[A-Z_]*\" d:/flashback_mdt_site/bot_discord/src/register-commands.js d:/flashback_mdt_site/bot_discord/src/index.js)"
-    ]
-  }
-}
