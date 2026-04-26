@@ -43,7 +43,7 @@ import {
   handleEntretienViewReason,
   handleEntretienRevert,
 } from './commands/entretien.js';
-import { handleLiens } from './commands/liens.js';
+import { handleLiens, handleConfigLiens } from './commands/liens.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -219,6 +219,9 @@ client.on('interactionCreate', async (interaction) => {
       }
       if (interaction.commandName === 'liens') {
         return handleLiens(interaction);
+      }
+      if (interaction.commandName === 'config-liens') {
+        return handleConfigLiens(interaction);
       }
 
       if (interaction.commandName === 'admin') {

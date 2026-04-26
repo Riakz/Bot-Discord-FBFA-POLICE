@@ -587,6 +587,29 @@ const commands = [
          )
     ),
 
+  new SlashCommandBuilder()
+    .setName('config-liens')
+    .setDescription('Configurer les rôles autorisés à utiliser /liens')
+    .addSubcommand((sub) =>
+      sub
+        .setName('add-role')
+        .setDescription('Ajouter un rôle autorisé à utiliser /liens')
+        .addRoleOption((opt) =>
+          opt.setName('role').setDescription('Rôle à autoriser').setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('remove-role')
+        .setDescription('Retirer un rôle autorisé')
+        .addRoleOption((opt) =>
+          opt.setName('role').setDescription('Rôle à retirer').setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub.setName('show').setDescription('Afficher les rôles configurés')
+    ),
+
   ficheData,
 ].map((c) => c.toJSON());
 
