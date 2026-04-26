@@ -360,7 +360,7 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName('reserver-pa')
-    .setDescription('Réserver un créneau Police Academy pour la semaine en cours')
+    .setDescription('Réserver un créneau Police Academy')
     .addStringOption((opt) =>
       opt.setName('district')
          .setDescription('Le district concerné')
@@ -375,7 +375,7 @@ const commands = [
     )
     .addStringOption((opt) =>
       opt.setName('jour')
-         .setDescription('Le jour de cette semaine')
+         .setDescription('Le jour')
          .setRequired(true)
          .addChoices(
            { name: 'Lundi',    value: 'Lundi' },
@@ -391,6 +391,15 @@ const commands = [
       opt.setName('creneau')
          .setDescription('L\'heure ou la plage horaire (ex: 21h00 - 23h00)')
          .setRequired(true)
+    )
+    .addStringOption((opt) =>
+      opt.setName('semaine')
+         .setDescription('Quelle semaine ? (défaut : cette semaine)')
+         .setRequired(false)
+         .addChoices(
+           { name: 'Cette semaine',    value: 'cette_semaine' },
+           { name: 'Semaine prochaine', value: 'semaine_prochaine' }
+         )
     ),
 
   new SlashCommandBuilder()
@@ -404,7 +413,16 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName('planning-pa')
-    .setDescription('Afficher le planning Police Academy de la semaine en cours'),
+    .setDescription('Afficher le planning Police Academy')
+    .addStringOption((opt) =>
+      opt.setName('semaine')
+         .setDescription('Quelle semaine ? (défaut : cette semaine)')
+         .setRequired(false)
+         .addChoices(
+           { name: 'Cette semaine',    value: 'cette_semaine' },
+           { name: 'Semaine prochaine', value: 'semaine_prochaine' }
+         )
+    ),
 
   new SlashCommandBuilder()
     .setName('antidouble')
