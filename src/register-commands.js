@@ -52,8 +52,7 @@ const commands = [
              .setDescription('Rôle autorisé (laisser vide = tout le monde peut réserver)')
              .setRequired(false)
         )
-    )
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    ),
 
   new SlashCommandBuilder()
     .setName('admin')
@@ -70,8 +69,7 @@ const commands = [
         .setDescription("Retirer un admin du bot")
         .addUserOption((opt) => opt.setName('utilisateur').setDescription('Utilisateur à retirer').setRequired(true))
     )
-    .addSubcommand((sub) => sub.setName('list').setDescription('Lister les admins du bot'))
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    .addSubcommand((sub) => sub.setName('list').setDescription('Lister les admins du bot')),
 
   new SlashCommandBuilder()
     .setName('create')
@@ -472,8 +470,7 @@ const commands = [
     )
     .addSubcommand((sub) =>
       sub.setName('show').setDescription('Afficher la configuration actuelle')
-    )
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    ),
 
   new SlashCommandBuilder()
     .setName('mirror')
@@ -497,8 +494,7 @@ const commands = [
     )
     .addSubcommand((sub) =>
       sub.setName('list').setDescription('Lister tous les miroirs actifs')
-    )
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    ),
 
   new SlashCommandBuilder()
     .setName('config-entretien')
