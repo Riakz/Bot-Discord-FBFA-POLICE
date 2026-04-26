@@ -23,6 +23,14 @@ if (!DISCORD_TOKEN || !CLIENT_ID) {
   process.exit(1);
 }
 
+if (process.argv.includes('--clear-global')) {
+  const rest = new REST({ version: '10' }).setToken(DISCORD_TOKEN);
+  console.log('Clearing global slash commands...');
+  await rest.put(Routes.applicationCommands(CLIENT_ID), { body: [] });
+  console.log('✅ Global slash commands cleared.');
+  process.exit(0);
+}
+
 const commands = [
   new SlashCommandBuilder()
     .setName('config-server')
