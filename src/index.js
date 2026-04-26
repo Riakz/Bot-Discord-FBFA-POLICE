@@ -40,7 +40,10 @@ import {
   processEntretienWebhook,
   handleEntretienButton,
   handleEntretienModal,
+  handleEntretienViewReason,
+  handleEntretienRevert,
 } from './commands/entretien.js';
+import { handleLiens } from './commands/liens.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -213,6 +216,9 @@ client.on('interactionCreate', async (interaction) => {
       }
       if (interaction.commandName === 'config-entretien') {
         return handleConfigEntretien(interaction);
+      }
+      if (interaction.commandName === 'liens') {
+        return handleLiens(interaction);
       }
 
       if (interaction.commandName === 'admin') {
@@ -1044,6 +1050,8 @@ client.on('interactionCreate', async (interaction) => {
       if (interaction.customId.startsWith('entretien_pass:') || interaction.customId.startsWith('entretien_fail:')) {
         return handleEntretienButton(interaction);
       }
+      if (interaction.customId.startsWith('entretien_viewreason:')) return handleEntretienViewReason(interaction);
+      if (interaction.customId.startsWith('entretien_revert:'))     return handleEntretienRevert(interaction);
 
       if (interaction.customId.startsWith('cand_district:')) return handleDistrictButton(interaction);
       if (interaction.customId.startsWith('cand_part2_btn:')) return handlePart2Button(interaction);

@@ -1,3 +1,6 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import {
   EmbedBuilder,
   ActionRowBuilder,
@@ -20,6 +23,39 @@ import {
   removeEntretienReviewerRole,
 } from '../utils/entretienConfig.js';
 import { DISTRICTS } from '../utils/candidatureConfig.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = path.dirname(__filename);
+
+const DECISIONS_FILE = path.join(__dirname, '..', 'data', 'entretien-decisions.json');
+let entretienDecisions = {};
+
+function loadEntretienDecisions() {
+  try {
+    if (fs.existsSync(DECISIONS_FILE)) {
+      entretienDecisions = JSON.parse(fs.readFileSync(DECISIONS_FILE, 'utf8'));
+    }
+  } catch { entretienDecisions = {}; }
+}
+
+function saveEntretienDecisions() {
+  try {
+    const dir = path.dirname(DECISIONS_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(DECISIONS_FILE, JSON.stringify(entretienDecisions, null, 2), 'utf8');
+  } catch (e) { error('[Entretien] Erreur sauvegarde decisions:', e); }
+}
+
+function getEntretienDecision(messageId) {
+  return entretienDecisions[messageId] ?? { status: 'pending' };
+}
+
+function setEntretienDecisionData(messageId, data) {
+  entretienDecisions[messageId] = { ...data, updatedAt: Date.now() };
+  saveEntretienDecisions();
+}
+
+loadEntretienDecisions();
 
 const LOGO_PA = 'https://media.discordapp.net/attachments/1447042636279189615/1497229717051277423/SAMP_PA_Logo.png';
 
@@ -61,21 +97,34 @@ function hasReviewerRole(interaction) {
   return ids.some(id => interaction.member.roles.cache.has(id)) || isAdmin(interaction.user.id);
 }
 
-function buildEntretienButtons(district, disabled = false) {
-  return new ActionRowBuilder().addComponents(
+function buildEntretienButtons(district, messageId = null, decided = false) {
+  const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`entretien_pass:${district}`)
       .setLabel('Attribuer rôle Réussi')
       .setEmoji('✅')
       .setStyle(ButtonStyle.Success)
-      .setDisabled(disabled),
+      .setDisabled(decided),
     new ButtonBuilder()
       .setCustomId(`entretien_fail:${district}`)
       .setLabel('Attribuer rôle Échoué')
       .setEmoji('❌')
       .setStyle(ButtonStyle.Danger)
-      .setDisabled(disabled),
+      .setDisabled(decided),
+    new ButtonBuilder()
+      .setCustomId(`entretien_viewreason:${messageId ?? 'pending'}`)
+      .setLabel('Voir le motif')
+      .setEmoji('📋')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(!decided),
+    new ButtonBuilder()
+      .setCustomId(`entretien_revert:${messageId ?? 'pending'}`)
+      .setLabel('Revenir sur la décision')
+      .setEmoji('🔄')
+      .setStyle(ButtonStyle.Primary)
+      .setDisabled(!decided),
   );
+  return row;
 }
 
 export async function processEntretienWebhook(client, message) {
@@ -147,12 +196,13 @@ export async function handleEntretienButton(interaction) {
     });
   }
 
-  const parts    = interaction.customId.split(':');
-  const isPass   = parts[0] === 'entretien_pass';
-  const district = parts[1] ?? 'unknown';
+  const parts     = interaction.customId.split(':');
+  const isPass    = parts[0] === 'entretien_pass';
+  const district  = parts[1] ?? 'unknown';
+  const messageId = interaction.message.id;
 
   const modal = new ModalBuilder()
-    .setCustomId(`modal_entretien_${isPass ? 'pass' : 'fail'}:${district}`)
+    .setCustomId(`modal_entretien_${isPass ? 'pass' : 'fail'}:${district}:${messageId}`)
     .setTitle(isPass ? '✅ Attribuer rôle Réussi' : '❌ Attribuer rôle Échoué');
 
   modal.addComponents(
@@ -185,9 +235,10 @@ export async function handleEntretienButton(interaction) {
 }
 
 export async function handleEntretienModal(interaction) {
-  const parts    = interaction.customId.split(':');
-  const isPass   = parts[0] === 'modal_entretien_pass';
-  const district = parts[1] ?? 'unknown';
+  const parts     = interaction.customId.split(':');
+  const isPass    = parts[0] === 'modal_entretien_pass';
+  const district  = parts[1] ?? 'unknown';
+  const messageId = parts[2] ?? null;
 
   const discordId = interaction.fields.getTextInputValue('entretien_discord_id').trim();
 
@@ -226,6 +277,18 @@ export async function handleEntretienModal(interaction) {
     return interaction.editReply({ content: `❌ Impossible d'attribuer le rôle: ${e.message}` });
   }
 
+  if (messageId) {
+    setEntretienDecisionData(messageId, {
+      status:      isPass ? 'passed' : 'failed',
+      district,
+      candidateId: discordId,
+      roleId,
+      decidedBy:   interaction.user.id,
+      decidedAt:   Date.now(),
+      reason,
+    });
+  }
+
   const districtName   = DISTRICTS[district] ?? district ?? 'Inconnu';
   const recruiterName  = interaction.member?.displayName || interaction.user.displayName;
   const gif            = ENTRETIEN_GIFS[district]?.[isPass ? 'passed' : 'failed'];
@@ -242,7 +305,7 @@ export async function handleEntretienModal(interaction) {
         value: `<@${interaction.user.id}> → Candidat : <@${discordId}>`,
         inline: false,
       });
-      await interaction.message.edit({ embeds: [updatedEmbed], components: [buildEntretienButtons(district, true)] });
+      await interaction.message.edit({ embeds: [updatedEmbed], components: [buildEntretienButtons(district, messageId, true)] });
     }
   } catch (e) {
     error('[Entretien] Erreur mise à jour embed:', e);
@@ -269,7 +332,11 @@ export async function handleEntretienModal(interaction) {
 
       if (gif) notifEmbed.setImage(gif);
 
-      await notifChannel.send({ content: `<@${discordId}>`, embeds: [notifEmbed] });
+      const sentNotif = await notifChannel.send({ content: `<@${discordId}>`, embeds: [notifEmbed] });
+      if (messageId) {
+        const cur = getEntretienDecision(messageId);
+        setEntretienDecisionData(messageId, { ...cur, notifMessageId: sentNotif.id, notifChannelId: cfg.notifChannelId });
+      }
     } catch (e) {
       error('[Entretien] Erreur envoi notification:', e);
     }
@@ -278,6 +345,110 @@ export async function handleEntretienModal(interaction) {
   return interaction.editReply({
     content: `✅ Rôle **${isPass ? 'Réussi' : 'Échoué'}** attribué à <@${discordId}>.${reason ? `\n**Motif :** ${reason}` : ''}`,
   });
+}
+
+export async function handleEntretienViewReason(interaction) {
+  const messageId = interaction.customId.split(':')[1];
+  const decision  = getEntretienDecision(messageId);
+
+  if (decision.status === 'pending') {
+    return interaction.reply({
+      content: '⚠️ Aucune décision n\'a encore été prise pour cet entretien.',
+      ephemeral: true,
+    });
+  }
+
+  if (decision.status === 'passed') {
+    return interaction.reply({
+      content: `✅ Cet entretien a été **validé** par <@${decision.decidedBy}> le <t:${Math.floor(decision.decidedAt / 1000)}:F>.`,
+      ephemeral: true,
+    });
+  }
+
+  return interaction.reply({
+    embeds: [
+      new EmbedBuilder()
+        .setTitle('📋 Motif de refus — Entretien')
+        .setColor(0xe74c3c)
+        .setDescription(decision.reason ?? 'Aucun motif renseigné.')
+        .addFields(
+          { name: 'Décidé par', value: `<@${decision.decidedBy}>`, inline: true },
+          { name: 'Date',       value: `<t:${Math.floor(decision.decidedAt / 1000)}:F>`, inline: true },
+        )
+        .setTimestamp(),
+    ],
+    ephemeral: true,
+  });
+}
+
+export async function handleEntretienRevert(interaction) {
+  if (!hasReviewerRole(interaction)) {
+    return interaction.reply({
+      content: '❌ Vous n\'avez pas le rôle requis pour annuler une décision d\'entretien.',
+      ephemeral: true,
+    });
+  }
+
+  const messageId = interaction.customId.split(':')[1];
+  const decision  = getEntretienDecision(messageId);
+
+  if (decision.status === 'pending') {
+    return interaction.reply({
+      content: '⚠️ Aucune décision à annuler pour cet entretien.',
+      ephemeral: true,
+    });
+  }
+
+  await interaction.deferReply({ ephemeral: true });
+
+  try {
+    const member = await interaction.guild.members.fetch(decision.candidateId).catch(() => null);
+    if (member && decision.roleId) {
+      await member.roles.remove(decision.roleId).catch(() => null);
+    }
+  } catch (e) {
+    error('[Entretien] Erreur retrait rôle revert:', e);
+  }
+
+  try {
+    if (interaction.message?.embeds?.length > 0) {
+      const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0]);
+      const originalColor = DISTRICT_COLORS[decision.district] ?? 0x2c3e50;
+      const fields = (updatedEmbed.data.fields ?? []).filter(f => f.name !== '👮 Traité par');
+      updatedEmbed.setColor(originalColor);
+      updatedEmbed.setFooter({ text: 'FlashBack FA • Entretien Police Academy' });
+      updatedEmbed.setFields(fields);
+      await interaction.message.edit({
+        embeds:     [updatedEmbed],
+        components: [buildEntretienButtons(decision.district, null, false)],
+      });
+    }
+  } catch (e) {
+    error('[Entretien] Erreur reset embed revert:', e);
+  }
+
+  if (decision.notifMessageId && decision.notifChannelId) {
+    try {
+      const notifCh  = await interaction.client.channels.fetch(decision.notifChannelId);
+      const notifMsg = await notifCh.messages.fetch(decision.notifMessageId);
+      await notifMsg.delete();
+    } catch { }
+  }
+
+  setEntretienDecisionData(messageId, {
+    ...decision,
+    status:         'pending',
+    candidateId:    null,
+    roleId:         null,
+    decidedBy:      null,
+    decidedAt:      null,
+    reason:         null,
+    notifMessageId: null,
+    notifChannelId: null,
+    revertedBy:     interaction.user.id,
+  });
+
+  return interaction.editReply({ content: '✅ La décision a été annulée. L\'entretien est à nouveau en attente.' });
 }
 
 export async function handleConfigEntretien(interaction) {

@@ -26,6 +26,22 @@ function norm(str) {
   return String(str).normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim();
 }
 
+function normPhone(str) {
+  if (!str) return '';
+  return String(str).replace(/\D/g, '');
+}
+
+function getNameParts(str) {
+  return norm(str).split(/[\s\-]+/).filter(p => p.length > 1);
+}
+
+function namePartsFullMatch(a, b) {
+  const pa = new Set(getNameParts(a));
+  const pb = new Set(getNameParts(b));
+  if (pa.size < 2 || pb.size < 2) return false;
+  return [...pa].every(p => pb.has(p)) && [...pb].every(p => pa.has(p));
+}
+
 function parseDate(str) {
   if (!str) return null;
   const parts = str.split('/');
@@ -65,57 +81,93 @@ function parseDuration(str) {
 }
 
 const CHECKS = [
+  // ── Définitif (100) ──────────────────────────────────────────
   {
-    key: 'uniqueId',
+    key:   'uniqueId',
     label: '🆔 ID Unique identique',
     score: 100,
     match: (a, b) => a.uniqueId && b.uniqueId && norm(a.uniqueId) === norm(b.uniqueId),
   },
   {
-    key: 'userId',
+    key:   'userId',
     label: '🎮 Même compte Discord',
     score: 100,
     match: (a, b) => a.userId && b.userId && a.userId === b.userId,
   },
+
+  // ── Très fort (80-90) ─────────────────────────────────────────
   {
-    key: 'username',
+    key:   'uniqueId_similar',
+    label: '🆔 ID Unique similaire (1 caractère d\'écart)',
+    score: 85,
+    match: (a, b) => {
+      if (!a.uniqueId || !b.uniqueId) return false;
+      const ua = norm(a.uniqueId), ub = norm(b.uniqueId);
+      if (ua === ub) return false;
+      return ua.length >= 3 && levenshtein(ua, ub) === 1;
+    },
+  },
+  {
+    key:   'username',
     label: '👤 Même pseudo Discord',
     score: 80,
     match: (a, b) => a.username && b.username && norm(a.username) === norm(b.username),
   },
+
+  // ── Fort (60-75) ──────────────────────────────────────────────
   {
-    key: 'name_exact',
+    key:   'phone',
+    label: '📞 Même numéro de téléphone',
+    score: 70,
+    match: (a, b) => {
+      if (!a.phone || !b.phone) return false;
+      const pa = normPhone(a.phone), pb = normPhone(b.phone);
+      if (pa.length >= 4 && pa === pb) return true;
+      return norm(a.phone) === norm(b.phone);
+    },
+  },
+  {
+    key:   'name_exact',
     label: '📛 Même nom de personnage',
     score: 70,
     match: (a, b) => a.name && b.name && norm(a.name) === norm(b.name),
   },
   {
-    key: 'phone',
-    label: '📞 Même numéro de téléphone',
+    key:   'name_parts',
+    label: '📛 Mêmes parties de nom (ordre différent)',
     score: 60,
-    match: (a, b) => a.phone && b.phone && norm(a.phone) === norm(b.phone),
+    match: (a, b) => {
+      if (!a.name || !b.name) return false;
+      if (norm(a.name) === norm(b.name)) return false;
+      return namePartsFullMatch(a.name, b.name);
+    },
   },
+
+  // ── Modéré (40-55) ─────────────────────────────────────────────
   {
-    key: 'birthdate_exact',
+    key:   'birthdate_exact',
     label: '🎂 Même date de naissance',
     score: 50,
     match: (a, b) => a.birthdate && b.birthdate && norm(a.birthdate) === norm(b.birthdate),
   },
   {
-    key: 'name_similar',
-    label: '📛 Nom de personnage similaire',
+    key:   'name_similar',
+    label: '📛 Nom de personnage similaire (±2 caractères)',
     score: 35,
     match: (a, b) => {
       if (!a.name || !b.name) return false;
       const na = norm(a.name), nb = norm(b.name);
       if (na === nb) return false;
+      if (namePartsFullMatch(a.name, b.name)) return false;
       return levenshtein(na, nb) <= 2;
     },
   },
+
+  // ── Faible / indicatif (15-25) ────────────────────────────────
   {
-    key: 'birthdate_close',
+    key:   'birthdate_close',
     label: '🎂 Date de naissance proche (±1 an)',
-    score: 20,
+    score: 25,
     match: (a, b) => {
       if (!a.birthdate || !b.birthdate) return false;
       const da = parseDate(a.birthdate), db = parseDate(b.birthdate);
@@ -125,14 +177,40 @@ const CHECKS = [
   },
 ];
 
+const COMBINED_BONUSES = [
+  {
+    label: '⚡ Bonus : nom similaire + même date de naissance',
+    bonus: 30,
+    condition: (keys) => keys.some(k => ['name_exact','name_parts','name_similar'].includes(k))
+                      && keys.some(k => ['birthdate_exact','birthdate_close'].includes(k)),
+  },
+  {
+    label: '⚡ Bonus : nom similaire + même téléphone',
+    bonus: 20,
+    condition: (keys) => keys.some(k => ['name_exact','name_parts','name_similar'].includes(k))
+                      && keys.includes('phone'),
+  },
+  {
+    label: '⚡ Bonus : même téléphone + même date de naissance',
+    bonus: 25,
+    condition: (keys) => keys.includes('phone')
+                      && keys.some(k => ['birthdate_exact','birthdate_close'].includes(k)),
+  },
+];
+
 const LEVELS = [
-  { min: 100, label: '🔴 Critique',      color: 0xe74c3c },
-  { min:  70, label: '🟠 Suspect',       color: 0xe67e22 },
-  { min:  40, label: '🟡 À surveiller',  color: 0xf1c40f },
+  { min: 100, label: '🔴 Critique',     color: 0xe74c3c },
+  { min:  70, label: '🟠 Suspect',      color: 0xe67e22 },
+  { min:  40, label: '🟡 À surveiller', color: 0xf1c40f },
 ];
 
 function getLevel(score) {
   return LEVELS.find(l => score >= l.min) ?? null;
+}
+
+function isAccountNew(entry) {
+  if (!entry.accountCreatedAt || !entry.submittedAt) return false;
+  return (entry.submittedAt - entry.accountCreatedAt) < 30 * 24 * 60 * 60 * 1000;
 }
 
 export function detectDoubles(newEntry) {
@@ -145,11 +223,17 @@ export function detectDoubles(newEntry) {
     const matched = CHECKS.filter(c => c.match(newEntry, existing));
     if (!matched.length) continue;
 
-    const totalScore = matched.reduce((s, c) => s + c.score, 0);
+    const keys = matched.map(c => c.key);
+    const baseScore = matched.reduce((s, c) => s + c.score, 0);
+
+    const bonuses = COMBINED_BONUSES.filter(b => b.condition(keys));
+    const bonusScore = bonuses.reduce((s, b) => s + b.bonus, 0);
+    const totalScore = baseScore + bonusScore;
+
     const level = getLevel(totalScore);
     if (!level) continue;
 
-    results.push({ existing, matched, totalScore, level });
+    results.push({ existing, matched, bonuses, totalScore, level });
   }
 
   return results.sort((a, b) => b.totalScore - a.totalScore);
@@ -171,13 +255,24 @@ export async function sendDoubleAlerts(client, newEntry) {
     return;
   }
 
-  for (const { existing, matched, totalScore, level } of matches) {
-    const criteriaList = matched.map(c => `• ${c.label} (+${c.score})`).join('\n');
-    const isBypass = isBlacklisted(existing.userId);
+  for (const { existing, matched, bonuses, totalScore, level } of matches) {
+    const isBypass   = isBlacklisted(existing.userId);
+    const isNewAcct  = isAccountNew(newEntry);
 
-    const bypassBanner = isBypass
-      ? '\n\n🚨 **TENTATIVE DE CONTOURNEMENT** — Le compte existant est blacklisté.'
-      : '';
+    const criteriaList = matched.map(c => `• ${c.label} \`+${c.score}\``).join('\n');
+    const bonusList    = bonuses.length ? '\n' + bonuses.map(b => `• ${b.label} \`+${b.bonus}\``).join('\n') : '';
+
+    const flags = [];
+    if (isBypass)  flags.push('🚨 **CONTOURNEMENT DE BLACKLIST** — le compte existant est blacklisté');
+    if (isNewAcct) flags.push('🆕 **COMPTE RÉCENT** — Discord créé il y a moins de 30 jours');
+
+    const accountAge = newEntry.accountCreatedAt
+      ? `<t:${Math.floor(newEntry.accountCreatedAt / 1000)}:R>`
+      : '—';
+
+    const existingDate = existing.submittedAt
+      ? `<t:${Math.floor(existing.submittedAt / 1000)}:d>`
+      : '—';
 
     const embed = new EmbedBuilder()
       .setTitle(isBypass
@@ -185,21 +280,31 @@ export async function sendDoubleAlerts(client, newEntry) {
         : `${level.label} — Double Compte Potentiel`)
       .setColor(isBypass ? 0x8b0000 : level.color)
       .setDescription(
-        `**Candidat actuel :** <@${newEntry.userId}> (\`${newEntry.userId}\`)\n` +
-        `**Candidat existant :** <@${existing.userId}> (\`${existing.userId}\`)` +
-        bypassBanner +
-        `\n\n**Score de similarité : ${totalScore} pts**\n\n` +
-        `**Critères déclencheurs :**\n${criteriaList}`
+        (flags.length ? flags.join('\n') + '\n\n' : '') +
+        `**Score de similarité : ${totalScore} pts**\n\n` +
+        `**Critères déclencheurs :**\n${criteriaList}${bonusList}`
       )
       .addFields(
         {
-          name: '📋 Candidature actuelle',
-          value: `District: \`${newEntry.districtKey}\`\nID Unique: \`${newEntry.uniqueId || '—'}\`\nNom: \`${newEntry.name || '—'}\`\nNé le: \`${newEntry.birthdate || '—'}\``,
+          name:  '🆕 Candidature actuelle',
+          value: `<@${newEntry.userId}> (\`${newEntry.userId}\`)\n` +
+                 `District: \`${newEntry.districtKey}\`\n` +
+                 `ID Unique: \`${newEntry.uniqueId || '—'}\`\n` +
+                 `Nom: \`${newEntry.name || '—'}\`\n` +
+                 `Né le: \`${newEntry.birthdate || '—'}\`\n` +
+                 `Tél: \`${newEntry.phone || '—'}\`\n` +
+                 `Compte Discord créé: ${accountAge}`,
           inline: true,
         },
         {
-          name: '📋 Candidature existante',
-          value: `District: \`${existing.districtKey}\`\nID Unique: \`${existing.uniqueId || '—'}\`\nNom: \`${existing.name || '—'}\`\nNé le: \`${existing.birthdate || '—'}\``,
+          name:  '📂 Candidature existante',
+          value: `<@${existing.userId}> (\`${existing.userId}\`)\n` +
+                 `District: \`${existing.districtKey}\`\n` +
+                 `ID Unique: \`${existing.uniqueId || '—'}\`\n` +
+                 `Nom: \`${existing.name || '—'}\`\n` +
+                 `Né le: \`${existing.birthdate || '—'}\`\n` +
+                 `Tél: \`${existing.phone || '—'}\`\n` +
+                 `Candidature du: ${existingDate}`,
           inline: true,
         },
       )

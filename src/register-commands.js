@@ -571,6 +571,22 @@ const commands = [
         )
     ),
 
+  new SlashCommandBuilder()
+    .setName('liens')
+    .setDescription('Afficher les liens Discord de la Police Academy')
+    .addStringOption((opt) =>
+      opt.setName('district')
+         .setDescription('Le district concerné')
+         .setRequired(true)
+         .addChoices(
+           { name: 'Mission Row',  value: 'mission_row' },
+           { name: 'Vespucci',     value: 'vespucci' },
+           { name: 'Alta',         value: 'alta' },
+           { name: 'Sandy Shores', value: 'sandy_shores' },
+           { name: 'Roxwood',      value: 'roxwood' },
+         )
+    ),
+
   ficheData,
 ].map((c) => c.toJSON());
 

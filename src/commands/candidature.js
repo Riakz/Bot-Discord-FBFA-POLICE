@@ -117,9 +117,7 @@ function hasReviewerRole(interaction) {
 }
 
 function buildDecisionButtons(messageId, status = 'pending') {
-  const isAccepted = status === 'accepted';
-  const isRefused  = status === 'refused';
-  const isPending  = status === 'pending';
+  const isPending = status === 'pending';
 
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -127,14 +125,14 @@ function buildDecisionButtons(messageId, status = 'pending') {
       .setLabel('Accepté')
       .setEmoji('✅')
       .setStyle(ButtonStyle.Success)
-      .setDisabled(isAccepted),
+      .setDisabled(!isPending),
 
     new ButtonBuilder()
       .setCustomId(`cand_refuse:${messageId}`)
       .setLabel('Refusé')
       .setEmoji('❌')
       .setStyle(ButtonStyle.Danger)
-      .setDisabled(isRefused),
+      .setDisabled(!isPending),
 
     new ButtonBuilder()
       .setCustomId(`cand_viewreason:${messageId}`)
@@ -484,16 +482,17 @@ export async function handleFormPart2(interaction) {
   });
 
   const storeEntry = {
-    msgId:      sentMsg.id,
-    userId:     interaction.user.id,
-    username:   interaction.user.username,
-    uniqueId:   part1.uniqueId,
-    name:       part1.name,
-    birthdate:  part1.birthdate,
-    phone:      part2.phone,
+    msgId:            sentMsg.id,
+    userId:           interaction.user.id,
+    username:         interaction.user.username,
+    uniqueId:         part1.uniqueId,
+    name:             part1.name,
+    birthdate:        part1.birthdate,
+    phone:            part2.phone,
     districtKey,
-    guildId:    interaction.guild.id,
-    submittedAt: Date.now(),
+    guildId:          interaction.guild.id,
+    submittedAt:      Date.now(),
+    accountCreatedAt: interaction.user.createdTimestamp,
   };
   saveCandidatureEntry(sentMsg.id, storeEntry);
   sendDoubleAlerts(interaction.client, storeEntry).catch(e => error('[Antidouble] Détection échouée:', e));
@@ -565,12 +564,14 @@ export async function handleAcceptButton(interaction) {
           { name: 'Candidat',   value: `<@${existing.candidateId}>`, inline: true },
           { name: 'District',   value: districtName,                 inline: true },
         )
-        .setFooter({ text: `San Andreas Police Academy | Recruteur : ${interaction.user.displayName}`, iconURL: LOGO_PA })
+        .setFooter({ text: `San Andreas Police Academy | Recruteur : ${interaction.member?.displayName || interaction.user.displayName}`, iconURL: LOGO_PA })
         .setTimestamp();
 
       if (gif) embed.setImage(gif);
 
-      await resultChannel.send({ embeds: [embed] });
+      const sentResultMsg = await resultChannel.send({ embeds: [embed] });
+      const cur = getDecision(messageId);
+      setDecision(messageId, { ...cur, resultMessageId: sentResultMsg.id, resultChannelId: resultId });
     } catch (e) {
       error('[Candidature] Erreur envoi résultat Accept:', e);
     }
@@ -688,12 +689,14 @@ export async function handleRefuseModal(interaction) {
           { name: 'Candidat',    value: `<@${existing.candidateId}>`, inline: true  },
           { name: 'District',    value: districtName,                  inline: true  },
         )
-        .setFooter({ text: `San Andreas Police Academy | Recruteur : ${interaction.user.displayName}`, iconURL: LOGO_PA })
+        .setFooter({ text: `San Andreas Police Academy | Recruteur : ${interaction.member?.displayName || interaction.user.displayName}`, iconURL: LOGO_PA })
         .setTimestamp();
 
       if (gif) embed.setImage(gif);
 
-      await resultChannel.send({ embeds: [embed] });
+      const sentResultMsg = await resultChannel.send({ embeds: [embed] });
+      const cur = getDecision(messageId);
+      setDecision(messageId, { ...cur, resultMessageId: sentResultMsg.id, resultChannelId: resultId });
     } catch (e) {
       error('[Candidature] Erreur envoi résultat Refus:', e);
     }
@@ -789,13 +792,23 @@ export async function handleRevertButton(interaction) {
     error('[Candidature] Erreur retrait rôles sur revert:', e);
   }
 
+  if (decision.resultMessageId && decision.resultChannelId) {
+    try {
+      const resultCh  = await interaction.client.channels.fetch(decision.resultChannelId);
+      const resultMsg = await resultCh.messages.fetch(decision.resultMessageId);
+      await resultMsg.delete();
+    } catch { }
+  }
+
   setDecision(messageId, {
     ...decision,
-    status:    'pending',
-    reason:    null,
-    decidedBy: null,
-    decidedAt: null,
-    revertedBy: interaction.user.id,
+    status:          'pending',
+    reason:          null,
+    decidedBy:       null,
+    decidedAt:       null,
+    resultMessageId: null,
+    resultChannelId: null,
+    revertedBy:      interaction.user.id,
   });
 
   return interaction.editReply({ content: '✅ La décision a été annulée. La candidature est à nouveau en attente.' });

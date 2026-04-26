@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node ./src/index.js",
     "dev": "node --watch ./src/index.js",
-    "register": "node ./src/register-commands.js"
+    "register": "node ./src/register-commands.js",
+    "clear-global": "node ./src/register-commands.js --clear-global"
   },
   "keywords": [
     "discord",
