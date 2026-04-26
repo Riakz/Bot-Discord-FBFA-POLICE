@@ -445,8 +445,7 @@ const commands = [
             .addUserOption(opt => opt.setName('user').setDescription('Utilisateur à retirer').setRequired(true))
         )
         .addSubcommand(sub => sub.setName('list').setDescription('Voir la liste des opérateurs'))
-    )
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    ),
 
   new SlashCommandBuilder()
     .setName('depart-watcher')
@@ -574,8 +573,7 @@ const commands = [
         .addRoleOption((opt) =>
           opt.setName('role').setDescription('Rôle examinateur à retirer').setRequired(true)
         )
-    )
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    ),
 
   ficheData,
 ].map((c) => c.toJSON());
