@@ -14,7 +14,9 @@ import { isAdmin } from '../utils/perms.js';
 import { error } from '../utils/logger.js';
 import {
   getEntretienConfig,
-  setEntretienResultChannel,
+  setEntretienWebhookChannel,
+  setEntretienReceptionChannel,
+  clearEntretienReceptionChannel,
   setEntretienNotifChannel,
   setEntretienSheetUrl,
   setEntretienRolePassed,
@@ -27,7 +29,7 @@ import { DISTRICTS } from '../utils/candidatureConfig.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 
-const DECISIONS_FILE = path.join(__dirname, '..', 'data', 'entretien-decisions.json');
+const DECISIONS_FILE = path.join(__dirname, '..', '..', 'data', 'entretien-decisions.json');
 let entretienDecisions = {};
 
 function loadEntretienDecisions() {
@@ -137,7 +139,10 @@ export async function processEntretienWebhook(client, message) {
     const guildId = message.guild?.id;
     if (!guildId) return;
 
-    const cfg         = getEntretienConfig(guildId);
+    const cfg = getEntretienConfig(guildId);
+
+    // Si un channel d'entrée est configuré, ignorer les webhooks venant d'ailleurs
+    if (cfg.webhookInputChannelId && message.channel.id !== cfg.webhookInputChannelId) return;
     const districtName = DISTRICTS[district] ?? district ?? 'Inconnu';
 
     const resultatLower = (resultat ?? '').toLowerCase();
@@ -174,13 +179,55 @@ export async function processEntretienWebhook(client, message) {
 
     const row = buildEntretienButtons(district ?? 'unknown');
 
-    let targetChannel = null;
-    if (cfg.resultChannelId) {
-      try { targetChannel = await client.channels.fetch(cfg.resultChannelId); } catch { }
+    // Salon de réception par district
+    const receptionId = cfg.receptionChannelsByDistrict?.[district];
+    let receptionChannel = null;
+    if (receptionId) {
+      try {
+        receptionChannel = await client.channels.fetch(receptionId);
+      } catch (e) {
+        error(`[Entretien] Impossible d'accéder au salon de réception du district ${district} (${receptionId}):`, e.message);
+      }
     }
-    if (!targetChannel) targetChannel = message.channel;
+    if (!receptionChannel) receptionChannel = message.channel;
 
-    await targetChannel.send({ embeds: [embed], components: [row] });
+    await receptionChannel.send({ embeds: [embed], components: [row] });
+
+    // Notification automatique vers le salon de réponse (si configuré)
+    if (cfg.notifChannelId) {
+      try {
+        const notifChannel = await client.channels.fetch(cfg.notifChannelId);
+
+        const resultatLower = (resultat ?? '').toLowerCase();
+        const isPass = resultatLower.includes('réussi') || resultatLower.includes('reussi');
+        const isFail = resultatLower.includes('écho') || resultatLower.includes('echo')
+                    || resultatLower.includes('raté') || resultatLower.includes('rate');
+
+        if (isPass || isFail) {
+          const gif = ENTRETIEN_GIFS[district]?.[isPass ? 'passed' : 'failed'];
+          const notifEmbed = new EmbedBuilder()
+            .setTitle(isPass
+              ? `✅ Entretien Validé — ${districtName}`
+              : `❌ Entretien Refusé — ${districtName}`)
+            .setColor(isPass ? 0x2ecc71 : 0xe74c3c)
+            .setDescription(isPass
+              ? `Félicitations **${candidat}**, votre entretien est validé. Vous avez 30 jours pour poursuivre votre parcours.`
+              : `**${candidat}**, vous avez été refusé lors de votre passage entretien.${commentaire ? `\n\n**Motif :** ${commentaire}` : ''}`)
+            .addFields(
+              { name: 'Candidat',    value: String(candidat    || '—'), inline: true },
+              { name: 'District',    value: districtName,                inline: true },
+              { name: 'Instructeur', value: String(instructeur || '—'), inline: true },
+            )
+            .setFooter({ text: 'San Andreas Police Academy', iconURL: LOGO_PA })
+            .setTimestamp();
+
+          if (gif) notifEmbed.setImage(gif);
+          await notifChannel.send({ embeds: [notifEmbed] });
+        }
+      } catch (e) {
+        error('[Entretien] Erreur envoi notification auto:', e);
+      }
+    }
 
     try { await message.delete(); } catch { }
   } catch (e) {
@@ -339,6 +386,10 @@ export async function handleEntretienModal(interaction) {
       }
     } catch (e) {
       error('[Entretien] Erreur envoi notification:', e);
+      await interaction.followUp({
+        content: `⚠️ Le rôle a été attribué mais la notification n'a pas pu être envoyée dans <#${cfg.notifChannelId}>. Vérifie que le bot a accès à ce salon.`,
+        ephemeral: true,
+      }).catch(() => {});
     }
   }
 
@@ -468,19 +519,25 @@ export async function handleConfigEntretien(interaction) {
 
     embed.addFields(
       {
-        name:  '📺 Salon réception (boutons Validé/Refusé)',
-        value: cfg.resultChannelId ? `<#${cfg.resultChannelId}>` : '❌ Non défini',
+        name:  '📥 Salon d\'entrée webhook (Google Sheet → Bot)',
+        value: cfg.webhookInputChannelId ? `<#${cfg.webhookInputChannelId}>` : '⚠️ Non défini (écoute partout)',
         inline: false,
       },
       {
-        name:  '📢 Salon notifications résultats',
+        name:  '📢 Salon de réponse (Validé/Refusé avec GIF)',
         value: cfg.notifChannelId ? `<#${cfg.notifChannelId}>` : '❌ Non défini',
         inline: false,
       },
     );
 
-    if (cfg.sheetUrl) {
-      embed.addFields({ name: '📊 Feuille Google Sheet', value: cfg.sheetUrl, inline: false });
+    for (const [key, name] of Object.entries(DISTRICTS)) {
+      const chId   = cfg.receptionChannelsByDistrict?.[key];
+      const roleId = cfg.rolesPassedByDistrict?.[key];
+      embed.addFields({
+        name:  `🏙️ ${name}`,
+        value: `📥 Réception: ${chId ? `<#${chId}>` : '❌'}\n✅ Rôle Réussi: ${roleId ? `<@&${roleId}>` : '❌'}`,
+        inline: true,
+      });
     }
 
     embed.addFields({
@@ -488,15 +545,6 @@ export async function handleConfigEntretien(interaction) {
       value: cfg.roleFailedId ? `<@&${cfg.roleFailedId}>` : '❌ Non défini',
       inline: false,
     });
-
-    for (const [key, name] of Object.entries(DISTRICTS)) {
-      const roleId = cfg.rolesPassedByDistrict?.[key];
-      embed.addFields({
-        name:  `✅ Rôle Réussi — ${name}`,
-        value: roleId ? `<@&${roleId}>` : '❌ Non défini',
-        inline: true,
-      });
-    }
 
     const reviewerIds = cfg.reviewerRoleIds ?? [];
     embed.addFields({
@@ -510,16 +558,29 @@ export async function handleConfigEntretien(interaction) {
     return interaction.reply({ embeds: [embed], ephemeral: true });
   }
 
-  if (sub === 'set-result-channel') {
-    const channelId = interaction.options.getString('channel-id', true).trim();
+  if (sub === 'set-reception-channel') {
+    const districtKey = interaction.options.getString('district', true);
+    const channelId   = interaction.options.getString('channel-id', true).trim();
     try {
       const ch = await interaction.client.channels.fetch(channelId);
       if (!ch || !ch.isTextBased()) return interaction.reply({ content: '❌ Salon invalide ou introuvable.', ephemeral: true });
     } catch {
       return interaction.reply({ content: '❌ Impossible de trouver ce salon.', ephemeral: true });
     }
-    setEntretienResultChannel(guildId, channelId);
-    return interaction.reply({ content: `✅ Salon de réception des entretiens (boutons Validé/Refusé) défini sur <#${channelId}>.`, ephemeral: true });
+    setEntretienReceptionChannel(guildId, districtKey, channelId);
+    return interaction.reply({
+      content: `✅ Salon de réception pour **${DISTRICTS[districtKey]}** défini sur <#${channelId}>.`,
+      ephemeral: true,
+    });
+  }
+
+  if (sub === 'clear-reception-channel') {
+    const districtKey = interaction.options.getString('district', true);
+    clearEntretienReceptionChannel(guildId, districtKey);
+    return interaction.reply({
+      content: `✅ Salon de réception pour **${DISTRICTS[districtKey]}** retiré.`,
+      ephemeral: true,
+    });
   }
 
   if (sub === 'set-notif-channel') {
@@ -531,7 +592,35 @@ export async function handleConfigEntretien(interaction) {
       return interaction.reply({ content: '❌ Impossible de trouver ce salon.', ephemeral: true });
     }
     setEntretienNotifChannel(guildId, channelId);
-    return interaction.reply({ content: `✅ Salon de notifications de résultats défini sur <#${channelId}>.`, ephemeral: true });
+    return interaction.reply({ content: `✅ Salon de réponse (Validé/Refusé avec GIF) défini sur <#${channelId}>.`, ephemeral: true });
+  }
+
+  if (sub === 'clear-notif-channel') {
+    setEntretienNotifChannel(guildId, null);
+    return interaction.reply({ content: '✅ Salon de réponse retiré.', ephemeral: true });
+  }
+
+  if (sub === 'set-webhook-channel') {
+    const channelId = interaction.options.getString('channel-id', true).trim();
+    try {
+      const ch = await interaction.client.channels.fetch(channelId);
+      if (!ch || !ch.isTextBased()) return interaction.reply({ content: '❌ Salon invalide ou introuvable.', ephemeral: true });
+    } catch {
+      return interaction.reply({ content: '❌ Impossible de trouver ce salon.', ephemeral: true });
+    }
+    setEntretienWebhookChannel(guildId, channelId);
+    return interaction.reply({
+      content: `✅ Salon d'entrée webhook défini sur <#${channelId}>.\nLe bot n'écoutera les \`ENTRETIEN_DATA\` que dans ce salon.`,
+      ephemeral: true,
+    });
+  }
+
+  if (sub === 'clear-webhook-channel') {
+    setEntretienWebhookChannel(guildId, null);
+    return interaction.reply({
+      content: '✅ Restriction retirée — le bot écoutera les `ENTRETIEN_DATA` depuis n\'importe quel salon.',
+      ephemeral: true,
+    });
   }
 
   if (sub === 'set-sheet-url') {

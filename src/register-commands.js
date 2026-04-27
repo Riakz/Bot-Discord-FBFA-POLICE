@@ -522,27 +522,62 @@ const commands = [
     )
     .addSubcommand((sub) =>
       sub
-        .setName('set-result-channel')
-        .setDescription('Définir le salon où les résultats d\'entretien seront publiés')
+        .setName('set-reception-channel')
+        .setDescription('Définir le salon de réception des entretiens pour un district (boutons Validé/Refusé)')
+        .addStringOption((opt) =>
+          opt.setName('district')
+             .setDescription('Le district concerné')
+             .setRequired(true)
+             .addChoices(
+               { name: 'Mission Row',  value: 'mission_row' },
+               { name: 'Vespucci',     value: 'vespucci' },
+               { name: 'Alta',         value: 'alta' },
+               { name: 'Sandy Shores', value: 'sandy_shores' },
+               { name: 'Roxwood',      value: 'roxwood' }
+             )
+        )
         .addStringOption((opt) =>
           opt.setName('channel-id').setDescription('ID du salon').setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('clear-reception-channel')
+        .setDescription('Retirer le salon de réception d\'un district')
+        .addStringOption((opt) =>
+          opt.setName('district')
+             .setDescription('Le district concerné')
+             .setRequired(true)
+             .addChoices(
+               { name: 'Mission Row',  value: 'mission_row' },
+               { name: 'Vespucci',     value: 'vespucci' },
+               { name: 'Alta',         value: 'alta' },
+               { name: 'Sandy Shores', value: 'sandy_shores' },
+               { name: 'Roxwood',      value: 'roxwood' }
+             )
         )
     )
     .addSubcommand((sub) =>
       sub
         .setName('set-notif-channel')
-        .setDescription('Définir le salon où les messages Validé/Refusé sont envoyés au candidat')
+        .setDescription('Définir le salon de réponse (Entretien Validé/Refusé avec GIF)')
         .addStringOption((opt) =>
           opt.setName('channel-id').setDescription('ID du salon').setRequired(true)
         )
     )
     .addSubcommand((sub) =>
+      sub.setName('clear-notif-channel').setDescription('Retirer le salon de réponse')
+    )
+    .addSubcommand((sub) =>
       sub
-        .setName('set-sheet-url')
-        .setDescription('Enregistrer l\'URL de la feuille Google Sheet (référence)')
+        .setName('set-webhook-channel')
+        .setDescription('Définir le salon d\'entrée unique où Google Sheet envoie les données (ENTRETIEN_DATA)')
         .addStringOption((opt) =>
-          opt.setName('url').setDescription('URL de la feuille').setRequired(true)
+          opt.setName('channel-id').setDescription('ID du salon').setRequired(true)
         )
+    )
+    .addSubcommand((sub) =>
+      sub.setName('clear-webhook-channel').setDescription('Retirer la restriction de salon d\'entrée webhook')
     )
     .addSubcommand((sub) =>
       sub

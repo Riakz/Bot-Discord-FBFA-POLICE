@@ -38,12 +38,13 @@ export function saveEntretienConfigs() {
 
 function defaultGuildConfig() {
   return {
-    resultChannelId: null,
-    notifChannelId:  null,
-    sheetUrl: null,
-    rolesPassedByDistrict: {},
-    roleFailedId: null,
-    reviewerRoleIds: [],
+    webhookInputChannelId:       null,
+    receptionChannelsByDistrict: {},
+    notifChannelId:              null,
+    sheetUrl:                    null,
+    rolesPassedByDistrict:       {},
+    roleFailedId:                null,
+    reviewerRoleIds:             [],
   };
 }
 
@@ -52,27 +53,46 @@ export function getEntretienConfig(guildId) {
     configs[guildId] = defaultGuildConfig();
     saveEntretienConfigs();
   }
+  // migration: ancien champ resultChannelId → on ignore, l'admin reconfigure
   return configs[guildId];
 }
 
-export function setEntretienResultChannel(guildId, channelId) {
+export function setEntretienReceptionChannel(guildId, districtKey, channelId) {
   const cfg = getEntretienConfig(guildId);
-  cfg.resultChannelId = channelId;
-  configs[guildId] = cfg;
+  if (!cfg.receptionChannelsByDistrict) cfg.receptionChannelsByDistrict = {};
+  cfg.receptionChannelsByDistrict[districtKey] = channelId;
   saveEntretienConfigs();
+}
+
+export function clearEntretienReceptionChannel(guildId, districtKey) {
+  const cfg = getEntretienConfig(guildId);
+  if (cfg.receptionChannelsByDistrict) {
+    delete cfg.receptionChannelsByDistrict[districtKey];
+    saveEntretienConfigs();
+  }
 }
 
 export function setEntretienNotifChannel(guildId, channelId) {
   const cfg = getEntretienConfig(guildId);
   cfg.notifChannelId = channelId;
-  configs[guildId] = cfg;
+  saveEntretienConfigs();
+}
+
+export function setEntretienSecretKey(guildId, key) {
+  const cfg = getEntretienConfig(guildId);
+  cfg.secretKey = key || null;
+  saveEntretienConfigs();
+}
+
+export function setEntretienWebhookChannel(guildId, channelId) {
+  const cfg = getEntretienConfig(guildId);
+  cfg.webhookInputChannelId = channelId || null;
   saveEntretienConfigs();
 }
 
 export function setEntretienSheetUrl(guildId, url) {
   const cfg = getEntretienConfig(guildId);
   cfg.sheetUrl = url;
-  configs[guildId] = cfg;
   saveEntretienConfigs();
 }
 
@@ -80,14 +100,12 @@ export function setEntretienRolePassed(guildId, districtKey, roleId) {
   const cfg = getEntretienConfig(guildId);
   if (!cfg.rolesPassedByDistrict) cfg.rolesPassedByDistrict = {};
   cfg.rolesPassedByDistrict[districtKey] = roleId;
-  configs[guildId] = cfg;
   saveEntretienConfigs();
 }
 
 export function setEntretienRoleFailed(guildId, roleId) {
   const cfg = getEntretienConfig(guildId);
   cfg.roleFailedId = roleId;
-  configs[guildId] = cfg;
   saveEntretienConfigs();
 }
 
@@ -96,7 +114,6 @@ export function addEntretienReviewerRole(guildId, roleId) {
   if (!cfg.reviewerRoleIds) cfg.reviewerRoleIds = [];
   if (!cfg.reviewerRoleIds.includes(roleId)) {
     cfg.reviewerRoleIds.push(roleId);
-    configs[guildId] = cfg;
     saveEntretienConfigs();
     return true;
   }
@@ -109,7 +126,6 @@ export function removeEntretienReviewerRole(guildId, roleId) {
   const before = cfg.reviewerRoleIds.length;
   cfg.reviewerRoleIds = cfg.reviewerRoleIds.filter(id => id !== roleId);
   if (cfg.reviewerRoleIds.length !== before) {
-    configs[guildId] = cfg;
     saveEntretienConfigs();
     return true;
   }
