@@ -45,13 +45,22 @@ const commands = [
     .addSubcommand((sub) => sub.setName('show').setDescription('Afficher la configuration actuelle'))
     .addSubcommand((sub) =>
       sub
-        .setName('set-pa-role')
-        .setDescription('Définir le rôle autorisé pour les réservations Police Academy')
+        .setName('add-pa-role')
+        .setDescription('Ajouter un rôle autorisé pour les réservations Police Academy')
         .addRoleOption((opt) =>
-          opt.setName('role')
-             .setDescription('Rôle autorisé (laisser vide = tout le monde peut réserver)')
-             .setRequired(false)
+          opt.setName('role').setDescription('Rôle à ajouter').setRequired(true)
         )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('remove-pa-role')
+        .setDescription('Retirer un rôle autorisé pour les réservations Police Academy')
+        .addRoleOption((opt) =>
+          opt.setName('role').setDescription('Rôle à retirer').setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub.setName('clear-pa-roles').setDescription('Retirer tous les rôles PA (tout le monde peut réserver)')
     ),
 
   new SlashCommandBuilder()

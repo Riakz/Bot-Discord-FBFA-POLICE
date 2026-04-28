@@ -29,8 +29,9 @@ function isDayPastThisWeek(jour) {
 
 function hasPARole(interaction) {
   const config = GuildManager.getGuildConfig(interaction.guild.id);
-  if (!config.paRoleId) return true;
-  return interaction.member.roles.cache.has(config.paRoleId);
+  const paRoles = config.paRoleIds ?? (config.paRoleId ? [config.paRoleId] : []);
+  if (paRoles.length === 0) return true;
+  return paRoles.some(id => interaction.member.roles.cache.has(id));
 }
 
 export async function handleReserverPA(interaction) {

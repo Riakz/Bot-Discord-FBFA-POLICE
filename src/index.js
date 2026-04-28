@@ -238,26 +238,49 @@ client.on('interactionCreate', async (interaction) => {
 
         if (sub === 'show') {
           const config = GuildManager.getGuildConfig(guildId);
+          const paRoles = config.paRoleIds ?? (config.paRoleId ? [config.paRoleId] : []);
           const embed = new EmbedBuilder()
             .setTitle(`Configuration du serveur: ${interaction.guild.name}`)
             .setColor(0x9b59b6)
             .addFields(
               { name: 'Rôle Staff', value: config.staffRoleId ? `<@&${config.staffRoleId}>` : '❌ Non défini', inline: true },
               { name: 'Catégorie Tickets', value: config.ticketCategoryId ? `<#${config.ticketCategoryId}>` : '❌ Non défini', inline: true },
+              {
+                name: 'Rôles PA (réservations)',
+                value: paRoles.length > 0 ? paRoles.map(id => `<@&${id}>`).join(', ') : '*(aucun — tout le monde peut réserver)*',
+                inline: false,
+              },
             )
             .setTimestamp();
           return interaction.reply({ embeds: [embed], ephemeral: true });
         }
 
-        if (sub === 'set-pa-role') {
-          const role = interaction.options.getRole('role');
-          GuildManager.updateGuildConfig(guildId, { paRoleId: role?.id || null });
+        if (sub === 'add-pa-role') {
+          const role = interaction.options.getRole('role', true);
+          const config = GuildManager.getGuildConfig(guildId);
+          const paRoles = config.paRoleIds ?? (config.paRoleId ? [config.paRoleId] : []);
+          if (paRoles.includes(role.id)) {
+            return interaction.reply({ content: `⚠️ ${role} est déjà dans la liste.`, ephemeral: true });
+          }
+          paRoles.push(role.id);
+          GuildManager.updateGuildConfig(guildId, { paRoleIds: paRoles, paRoleId: null });
+          return interaction.reply({ content: `✅ ${role} ajouté — seuls les membres avec un rôle PA pourront réserver.`, ephemeral: true });
+        }
+
+        if (sub === 'remove-pa-role') {
+          const role = interaction.options.getRole('role', true);
+          const config = GuildManager.getGuildConfig(guildId);
+          const paRoles = (config.paRoleIds ?? (config.paRoleId ? [config.paRoleId] : [])).filter(id => id !== role.id);
+          GuildManager.updateGuildConfig(guildId, { paRoleIds: paRoles, paRoleId: null });
           return interaction.reply({
-            content: role
-              ? `✅ Rôle PA défini : ${role} — seuls les membres avec ce rôle pourront réserver.`
-              : `✅ Restriction de rôle PA supprimée — tout le monde peut réserver.`,
-            ephemeral: true
+            content: `✅ ${role} retiré.${paRoles.length === 0 ? ' Aucun rôle PA — tout le monde peut réserver.' : ''}`,
+            ephemeral: true,
           });
+        }
+
+        if (sub === 'clear-pa-roles') {
+          GuildManager.updateGuildConfig(guildId, { paRoleIds: [], paRoleId: null });
+          return interaction.reply({ content: '✅ Tous les rôles PA retirés — tout le monde peut réserver.', ephemeral: true });
         }
 
         if (sub === 'setup') {
