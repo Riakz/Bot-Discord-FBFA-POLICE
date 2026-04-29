@@ -1243,6 +1243,7 @@ client.on('interactionCreate', async (interaction) => {
         const { embed, row } = await buildBlEmbed(interaction.client, page);
         return interaction.update({ embeds: [embed], components: [row] });
       }
+      if (interaction.customId.startsWith('custom_panel_btn:')) return;
       return handleTicketButtons(interaction, process.env);
     } else if (interaction.isModalSubmit()) {
       if (interaction.customId.startsWith('modal_antidbl_bl:')) return handleAntidoubleModal(interaction);
