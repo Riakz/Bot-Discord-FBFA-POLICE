@@ -1647,6 +1647,11 @@ client.on('interactionCreate', async (interaction) => {
         return interaction.reply({ content: '❌ Erreur: ID de canal invalide.', ephemeral: true });
       }
 
+      const hasManage = interaction.channel.permissionsFor(interaction.member)?.has(PermissionsBitField.Flags.ManageChannels);
+      if (!hasManage && !isAdmin(interaction.user.id)) {
+        return interaction.reply({ content: '❌ Vous n\'êtes pas autorisé à fermer ce ticket.', ephemeral: true });
+      }
+
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`ticket_close_confirm:${channelId}`).setLabel('Confirmer').setStyle(ButtonStyle.Danger),
         new ButtonBuilder().setCustomId('ticket_close_cancel_custom').setLabel('Annuler').setStyle(ButtonStyle.Secondary),
@@ -1709,6 +1714,11 @@ client.on('interactionCreate', async (interaction) => {
 
       if (interaction.channel.id !== channelId) {
         return interaction.reply({ content: '❌ Erreur: ID de canal invalide.', ephemeral: true });
+      }
+
+      const hasManage = interaction.channel.permissionsFor(interaction.member)?.has(PermissionsBitField.Flags.ManageChannels);
+      if (!hasManage && !isAdmin(interaction.user.id)) {
+        return interaction.reply({ content: '❌ Vous n\'êtes pas autorisé à claim ce ticket.', ephemeral: true });
       }
 
       const topic = interaction.channel.topic || '';
