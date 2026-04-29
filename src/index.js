@@ -224,6 +224,80 @@ client.on('interactionCreate', async (interaction) => {
         return handleConfigLiens(interaction);
       }
 
+      if (interaction.commandName === 'whitelist') {
+        if (!isAdmin(interaction.user.id)) {
+          return interaction.reply({ content: '❌ Réservé aux administrateurs du bot.', ephemeral: true });
+        }
+
+        const sub = interaction.options.getSubcommand();
+        const guildId = interaction.guild.id;
+
+        if (sub === 'add-role') {
+          const role = interaction.options.getRole('role', true);
+          const added = addToWhitelist(guildId, role.id, 'role');
+          if (added) {
+            return interaction.reply({ content: `✅ Rôle <@&${role.id}> ajouté à la whitelist.`, ephemeral: true });
+          } else {
+            return interaction.reply({ content: `⚠️ Ce rôle est déjà dans la whitelist.`, ephemeral: true });
+          }
+        }
+
+        if (sub === 'remove-role') {
+          const role = interaction.options.getRole('role', true);
+          const removed = removeFromWhitelist(guildId, role.id);
+          if (removed) {
+            return interaction.reply({ content: `✅ Rôle <@&${role.id}> retiré de la whitelist.`, ephemeral: true });
+          } else {
+            return interaction.reply({ content: `⚠️ Ce rôle n'est pas dans la whitelist.`, ephemeral: true });
+          }
+        }
+
+        if (sub === 'add-user') {
+          const user = interaction.options.getUser('user', true);
+          const added = addToWhitelist(guildId, user.id, 'user');
+          if (added) {
+            return interaction.reply({ content: `✅ Utilisateur <@${user.id}> ajouté à la whitelist.`, ephemeral: true });
+          } else {
+            return interaction.reply({ content: `⚠️ Cet utilisateur est déjà dans la whitelist.`, ephemeral: true });
+          }
+        }
+
+        if (sub === 'remove-user') {
+          const user = interaction.options.getUser('user', true);
+          const removed = removeFromWhitelist(guildId, user.id);
+          if (removed) {
+            return interaction.reply({ content: `✅ Utilisateur <@${user.id}> retiré de la whitelist.`, ephemeral: true });
+          } else {
+            return interaction.reply({ content: `⚠️ Cet utilisateur n'est pas dans la whitelist.`, ephemeral: true });
+          }
+        }
+
+        if (sub === 'show') {
+          const wl = getWhitelist(guildId);
+          const userList = wl.users.length > 0
+            ? wl.users.map(id => `<@${id}> (\`${id}\`)`).join('\n')
+            : '_Aucun utilisateur_';
+          const roleList = wl.roles.length > 0
+            ? wl.roles.map(id => `<@&${id}> (\`${id}\`)`).join('\n')
+            : '_Aucun rôle_';
+
+          const embed = new EmbedBuilder()
+            .setTitle('Whitelist du serveur')
+            .setColor(0x2ecc71)
+            .addFields(
+              { name: `Rôles whitelistés (${wl.roles.length})`, value: roleList, inline: false },
+              { name: `Utilisateurs whitelistés (${wl.users.length})`, value: userList, inline: false },
+            )
+            .setDescription('Les membres possédant un rôle whitelist **ou** listés individuellement peuvent utiliser `/search-bl`, `/add`, `/remove`, `/rename` et `!alert`.')
+            .setFooter({ text: `Server ID: ${guildId}` })
+            .setTimestamp();
+
+          return interaction.reply({ embeds: [embed], ephemeral: true });
+        }
+
+        return;
+      }
+
       if (interaction.commandName === 'admin') {
         return handleAdminSlash(interaction);
       }
@@ -664,6 +738,70 @@ client.on('interactionCreate', async (interaction) => {
             error('Error updating panel log channel:', e);
             return interaction.reply({ content: `❌ Erreur: ${e.message}`, ephemeral: true });
           }
+        }
+
+        if (subcommand === 'set-button-log') {
+          const panelId  = interaction.options.getString('panel-id', true);
+          const buttonId = interaction.options.getString('button-id', true);
+          const channelId = interaction.options.getString('channel-id', true).trim();
+          const panel = PanelManager.getPanel(panelId);
+          if (!panel) return interaction.reply({ content: '❌ Panel introuvable.', ephemeral: true });
+          if (panel.guildId && panel.guildId !== guildId) return interaction.reply({ content: '❌ Ce panel appartient à un autre serveur.', ephemeral: true });
+          const btn = panel.buttons.find(b => b.id === buttonId);
+          if (!btn) return interaction.reply({ content: '❌ Bouton introuvable.', ephemeral: true });
+
+          let finalChannelId = null;
+          if (channelId.toLowerCase() !== 'none') {
+            try {
+              const ch = await interaction.guild.channels.fetch(channelId);
+              if (!ch || !ch.isTextBased()) return interaction.reply({ content: '❌ Canal invalide.', ephemeral: true });
+              finalChannelId = ch.id;
+            } catch { return interaction.reply({ content: '❌ Canal introuvable.', ephemeral: true }); }
+          }
+          PanelManager.updateButtonLogChannel(panelId, buttonId, finalChannelId);
+          return interaction.reply({
+            content: finalChannelId
+              ? `✅ Logs pour le bouton **${btn.label}** → <#${finalChannelId}> (prioritaire sur le panel).`
+              : `✅ Logs du bouton **${btn.label}** retirés (retour aux logs du panel).`,
+            ephemeral: true,
+          });
+        }
+
+        if (subcommand === 'set-button-welcome') {
+          const panelId  = interaction.options.getString('panel-id', true);
+          const buttonId = interaction.options.getString('button-id', true);
+          const panel = PanelManager.getPanel(panelId);
+          if (!panel) return interaction.reply({ content: '❌ Panel introuvable.', ephemeral: true });
+          if (panel.guildId && panel.guildId !== guildId) return interaction.reply({ content: '❌ Ce panel appartient à un autre serveur.', ephemeral: true });
+          const btn = panel.buttons.find(b => b.id === buttonId);
+          if (!btn) return interaction.reply({ content: '❌ Bouton introuvable.', ephemeral: true });
+
+          const modal = new ModalBuilder()
+            .setCustomId(`modal_button_welcome:${panelId}:${buttonId}`)
+            .setTitle(`Message d'ouverture — ${btn.label}`);
+          modal.addComponents(
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder()
+                .setCustomId('welcome_title')
+                .setLabel('Titre du message')
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder(`Ticket: ${btn.label}`)
+                .setValue(btn.welcomeTitle || '')
+                .setRequired(false)
+                .setMaxLength(100)
+            ),
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder()
+                .setCustomId('welcome_message')
+                .setLabel('Contenu du message')
+                .setStyle(TextInputStyle.Paragraph)
+                .setPlaceholder("Votre ticket a été créé. L'équipe vous répondra bientôt.")
+                .setValue(btn.welcomeMessage || '')
+                .setRequired(false)
+                .setMaxLength(2000)
+            ),
+          );
+          return interaction.showModal(modal);
         }
 
         if (subcommand === 'edit') {
@@ -1366,6 +1504,21 @@ client.on('interactionCreate', async (interaction) => {
           return interaction.reply({ content: `❌ Erreur: ${e.message}`, ephemeral: true });
         }
       }
+
+      if (interaction.customId.startsWith('modal_button_welcome:')) {
+        const parts    = interaction.customId.split(':');
+        const panelId  = parts[1];
+        const buttonId = parts[2];
+        const panel = PanelManager.getPanel(panelId);
+        if (!panel) return interaction.reply({ content: '❌ Panel introuvable.', ephemeral: true });
+        const btn = panel.buttons.find(b => b.id === buttonId);
+        if (!btn) return interaction.reply({ content: '❌ Bouton introuvable.', ephemeral: true });
+
+        const title   = interaction.fields.getTextInputValue('welcome_title').trim();
+        const message = interaction.fields.getTextInputValue('welcome_message').trim();
+        PanelManager.updateButtonWelcome(panelId, buttonId, title || null, message || null);
+        return interaction.reply({ content: `✅ Message d'ouverture mis à jour pour le bouton **${btn.label}**.`, ephemeral: true });
+      }
     }
   } catch (err) {
     error('interactionCreate error:', err);
@@ -1430,11 +1583,13 @@ client.on('interactionCreate', async (interaction) => {
         });
       }
 
+      const effectiveLogId = button.logChannelId || panel.logChannelId || null;
+
       const ticketChannel = await interaction.guild.channels.create({
         name: ticketName,
         type: 0,
         parent: category.id,
-        topic: `OPENED_BY:${interaction.user.id}${panel.logChannelId ? ` LOG_CHANNEL_ID:${panel.logChannelId}` : ''}`,
+        topic: `OPENED_BY:${interaction.user.id}${effectiveLogId ? ` LOG_CHANNEL_ID:${effectiveLogId}` : ''}`,
         permissionOverwrites,
       });
 
@@ -1641,18 +1796,27 @@ client.on('messageCreate', async (message) => {
         if (!isAdmin(message.author.id)) {
           return message.reply('❌ Réservé aux administrateurs du bot.');
         }
-        if (args.length < 1) return message.reply('❌ Usage: `+wl <idRole|idUser>`');
-        const targetId = args[0].trim();
+        if (args.length < 1) return message.reply('❌ Usage: `+wl <@role|@user|id>`');
+        const raw = args[0].trim();
 
-        if (!/^\d{17,20}$/.test(targetId)) return message.reply('❌ ID invalide.');
+        // Parse mention formats: <@&roleId> or <@userId> or <@!userId>
+        const roleMentionMatch = raw.match(/^<@&(\d{17,20})>$/);
+        const userMentionMatch = raw.match(/^<@!?(\d{17,20})>$/);
+        const rawId = roleMentionMatch?.[1] ?? userMentionMatch?.[1] ?? raw;
+
+        if (!/^\d{17,20}$/.test(rawId)) return message.reply('❌ ID invalide. Utilisez une mention ou un ID Discord.');
 
         let type = 'user';
-        const role = await message.guild.roles.fetch(targetId).catch(() => null);
-        if (role) type = 'role';
+        if (roleMentionMatch) {
+          type = 'role';
+        } else if (!userMentionMatch) {
+          const fetchedRole = await message.guild.roles.fetch(rawId).catch(() => null);
+          if (fetchedRole) type = 'role';
+        }
 
-        const added = addToWhitelist(message.guild.id, targetId, type);
+        const added = addToWhitelist(message.guild.id, rawId, type);
         if (added) {
-          message.reply(`✅ **${type === 'role' ? 'Rôle' : 'Utilisateur'}** ajouté à la whitelist pour ce serveur : \`${targetId}\``);
+          message.reply(`✅ **${type === 'role' ? 'Rôle' : 'Utilisateur'}** ajouté à la whitelist pour ce serveur : \`${rawId}\``);
         } else {
           message.reply(`⚠️ Cet ID est déjà dans la whitelist de ce serveur.`);
         }
@@ -1663,12 +1827,18 @@ client.on('messageCreate', async (message) => {
         if (!isAdmin(message.author.id)) {
           return message.reply('❌ Réservé aux administrateurs du bot.');
         }
-        if (args.length < 1) return message.reply('❌ Usage: `+unwl <idRole|idUser>`');
-        const targetId = args[0].trim();
+        if (args.length < 1) return message.reply('❌ Usage: `+unwl <@role|@user|id>`');
+        const raw = args[0].trim();
 
-        const removed = removeFromWhitelist(message.guild.id, targetId);
+        const roleMentionMatch = raw.match(/^<@&(\d{17,20})>$/);
+        const userMentionMatch = raw.match(/^<@!?(\d{17,20})>$/);
+        const rawId = roleMentionMatch?.[1] ?? userMentionMatch?.[1] ?? raw;
+
+        if (!/^\d{17,20}$/.test(rawId)) return message.reply('❌ ID invalide. Utilisez une mention ou un ID Discord.');
+
+        const removed = removeFromWhitelist(message.guild.id, rawId);
         if (removed) {
-          message.reply(`✅ ID retiré de la whitelist pour ce serveur : \`${targetId}\``);
+          message.reply(`✅ ID retiré de la whitelist pour ce serveur : \`${rawId}\``);
         } else {
           message.reply(`⚠️ ID non trouvé dans la whitelist de ce serveur.`);
         }

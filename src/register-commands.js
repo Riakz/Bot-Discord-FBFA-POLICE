@@ -174,6 +174,31 @@ const commands = [
         .addStringOption((opt) =>
           opt.setName('channel-id').setDescription('ID du canal de logs (ou "none" pour désactiver)').setRequired(true)
         )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('set-button-log')
+        .setDescription('Définir un canal de logs spécifique à un bouton (prioritaire sur le panel)')
+        .addStringOption((opt) =>
+          opt.setName('panel-id').setDescription('ID du panel').setRequired(true)
+        )
+        .addStringOption((opt) =>
+          opt.setName('button-id').setDescription('ID du bouton').setRequired(true)
+        )
+        .addStringOption((opt) =>
+          opt.setName('channel-id').setDescription('ID du canal de logs (ou "none" pour désactiver)').setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('set-button-welcome')
+        .setDescription('Définir le titre et le message d\'ouverture d\'un ticket pour un bouton')
+        .addStringOption((opt) =>
+          opt.setName('panel-id').setDescription('ID du panel').setRequired(true)
+        )
+        .addStringOption((opt) =>
+          opt.setName('button-id').setDescription('ID du bouton').setRequired(true)
+        )
     ),
 
   new SlashCommandBuilder()
@@ -670,6 +695,45 @@ const commands = [
     )
     .addSubcommand((sub) =>
       sub.setName('show').setDescription('Afficher les rôles configurés')
+    ),
+
+  new SlashCommandBuilder()
+    .setName('whitelist')
+    .setDescription('Gérer la whitelist des utilisateurs et rôles autorisés')
+    .addSubcommand((sub) =>
+      sub
+        .setName('add-role')
+        .setDescription('Ajouter un rôle à la whitelist (tous les membres du rôle seront autorisés)')
+        .addRoleOption((opt) =>
+          opt.setName('role').setDescription('Rôle à whitelister').setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('remove-role')
+        .setDescription('Retirer un rôle de la whitelist')
+        .addRoleOption((opt) =>
+          opt.setName('role').setDescription('Rôle à retirer').setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('add-user')
+        .setDescription('Ajouter un utilisateur à la whitelist')
+        .addUserOption((opt) =>
+          opt.setName('user').setDescription('Utilisateur à whitelister').setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('remove-user')
+        .setDescription('Retirer un utilisateur de la whitelist')
+        .addUserOption((opt) =>
+          opt.setName('user').setDescription('Utilisateur à retirer').setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub.setName('show').setDescription('Afficher la whitelist actuelle (utilisateurs et rôles)')
     ),
 
   ficheData,

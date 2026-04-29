@@ -76,8 +76,9 @@ export function addButtonToPanel(panelId, buttonConfig) {
         categoryId: buttonConfig.categoryId,
         roleIds: buttonConfig.roleIds || [],
         ticketNamePrefix: buttonConfig.ticketNamePrefix || 'ticket',
-        welcomeTitle: buttonConfig.welcomeTitle || `Ticket: ${buttonConfig.label}`,
-        welcomeMessage: buttonConfig.welcomeMessage || 'Votre ticket a été créé. L\'équipe vous répondra bientôt.',
+        welcomeTitle: buttonConfig.welcomeTitle || null,
+        welcomeMessage: buttonConfig.welcomeMessage || null,
+        logChannelId: buttonConfig.logChannelId || null,
     });
 
     savePanels();
@@ -96,6 +97,25 @@ export function updatePanelLogChannel(panelId, logChannelId) {
     const panel = panels[panelId];
     if (!panel) throw new Error('Panel not found');
     panel.logChannelId = logChannelId;
+    savePanels();
+}
+
+export function updateButtonLogChannel(panelId, buttonId, logChannelId) {
+    const panel = panels[panelId];
+    if (!panel) throw new Error('Panel not found');
+    const button = panel.buttons.find(b => b.id === buttonId);
+    if (!button) throw new Error('Button not found');
+    button.logChannelId = logChannelId;
+    savePanels();
+}
+
+export function updateButtonWelcome(panelId, buttonId, welcomeTitle, welcomeMessage) {
+    const panel = panels[panelId];
+    if (!panel) throw new Error('Panel not found');
+    const button = panel.buttons.find(b => b.id === buttonId);
+    if (!button) throw new Error('Button not found');
+    if (welcomeTitle)   button.welcomeTitle   = welcomeTitle;
+    if (welcomeMessage) button.welcomeMessage = welcomeMessage;
     savePanels();
 }
 
