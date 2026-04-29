@@ -1032,7 +1032,8 @@ client.on('interactionCreate', async (interaction) => {
       if (interaction.commandName === 'add' || interaction.commandName === 'remove') {
         const guildId = interaction.guild.id;
 
-        const allowed = isWhitelisted(guildId, interaction.user.id, interaction.member) || isAdmin(interaction.user.id);
+        const hasChannelManage = interaction.channel?.permissionsFor(interaction.member)?.has(PermissionsBitField.Flags.ManageChannels);
+        const allowed = isWhitelisted(guildId, interaction.user.id, interaction.member) || isAdmin(interaction.user.id) || hasChannelManage;
         if (!allowed) {
           return interaction.reply({ content: '❌ Vous n\'êtes pas dans la whitelist pour utiliser cette commande.', ephemeral: true });
         }
@@ -1112,7 +1113,8 @@ client.on('interactionCreate', async (interaction) => {
       if (interaction.commandName === 'rename') {
         const guildId = interaction.guild.id;
 
-        const allowed = isWhitelisted(guildId, interaction.user.id, interaction.member) || isAdmin(interaction.user.id);
+        const hasChannelManage = interaction.channel?.permissionsFor(interaction.member)?.has(PermissionsBitField.Flags.ManageChannels);
+        const allowed = isWhitelisted(guildId, interaction.user.id, interaction.member) || isAdmin(interaction.user.id) || hasChannelManage;
         if (!allowed) {
           return interaction.reply({ content: '❌ Vous n\'êtes pas dans la whitelist pour utiliser cette commande.', ephemeral: true });
         }
