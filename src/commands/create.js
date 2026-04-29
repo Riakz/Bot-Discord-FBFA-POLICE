@@ -1,4 +1,4 @@
-import { ChannelType, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, AttachmentBuilder } from 'discord.js';
+import { ChannelType, PermissionFlagsBits, PermissionsBitField, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, AttachmentBuilder } from 'discord.js';
 import { isAdmin } from '../utils/perms.js';
 import * as GuildManager from '../utils/guildConfig.js';
 
@@ -104,8 +104,9 @@ export async function handleTicketButtons(interaction) {
 
   const hasStaffRole = STAFF_ROLE_ID && member?.roles?.cache?.has(STAFF_ROLE_ID);
   const callerIsAdmin = isAdmin(interaction.user.id) || member?.permissions?.has(PermissionFlagsBits.Administrator);
+  const hasChannelManage = channel.permissionsFor(member)?.has(PermissionsBitField.Flags.ManageChannels);
 
-  if (!hasStaffRole && !callerIsAdmin) {
+  if (!hasStaffRole && !callerIsAdmin && !hasChannelManage) {
     return interaction.reply({ content: '❌ Vous n\'êtes pas autorisé à utiliser ce panneau.', ephemeral: true });
   }
 

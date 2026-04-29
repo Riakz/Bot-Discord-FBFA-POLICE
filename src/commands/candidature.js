@@ -195,36 +195,40 @@ export async function handleCandidaturePanelModal(interaction) {
 
   await interaction.deferReply({ ephemeral: true });
 
-  const customTitle = interaction.fields.getTextInputValue('cand_setup_title').trim() || '📋 Candidature — Police';
-  const customDesc  = interaction.fields.getTextInputValue('cand_setup_desc').trim();
+  try {
+    const customTitle = interaction.fields.getTextInputValue('cand_setup_title').trim() || '📋 Candidature — Police';
+    const customDesc  = interaction.fields.getTextInputValue('cand_setup_desc').trim();
 
-  let finalDesc = '';
-  if (customDesc) {
-    finalDesc += customDesc + '\n\n';
+    let finalDesc = '';
+    if (customDesc) {
+      finalDesc += customDesc + '\n\n';
+    }
+
+    finalDesc += Object.entries(DISTRICTS).map(([key, name]) =>
+      `- **${name}**`
+    ).join('\n');
+
+    const embed = new EmbedBuilder()
+      .setTitle(customTitle)
+      .setDescription(finalDesc)
+      .setColor(0x2c3e50)
+      .setFooter({ text: 'FlashBack FA • Candidature Police' })
+      .setTimestamp();
+
+    const row = new ActionRowBuilder().addComponents(
+      ...Object.entries(DISTRICTS).map(([key, name]) =>
+        new ButtonBuilder()
+          .setCustomId(`cand_district:${key}`)
+          .setLabel(name)
+          .setStyle(ButtonStyle.Primary)
+      )
+    );
+
+    await interaction.channel.send({ embeds: [embed], components: [row] });
+    return interaction.editReply({ content: '✅ Panel de candidature publié.' });
+  } catch (e) {
+    return interaction.editReply({ content: `❌ Erreur lors de la publication : ${e.message}` });
   }
-
-  finalDesc += Object.entries(DISTRICTS).map(([key, name]) =>
-    `- **${name}**`
-  ).join('\n');
-
-  const embed = new EmbedBuilder()
-    .setTitle(customTitle)
-    .setDescription(finalDesc)
-    .setColor(0x2c3e50)
-    .setFooter({ text: 'FlashBack FA • Candidature Police' })
-    .setTimestamp();
-
-  const row = new ActionRowBuilder().addComponents(
-    Object.entries(DISTRICTS).map(([key, name]) =>
-      new ButtonBuilder()
-        .setCustomId(`cand_district:${key}`)
-        .setLabel(name)
-        .setStyle(ButtonStyle.Primary)
-    )
-  );
-
-  await interaction.channel.send({ embeds: [embed], components: [row] });
-  return interaction.editReply({ content: '✅ Panel de candidature publié.' });
 }
 
 export async function handleDistrictButton(interaction) {
