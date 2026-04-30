@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { log, error } from './logger.js';
+import { safeWriteJSON } from './safeWrite.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -33,7 +34,7 @@ export function loadPanels() {
 
 export function savePanels() {
     try {
-        fs.writeFileSync(PANELS_FILE, JSON.stringify(panels, null, 2), 'utf8');
+        safeWriteJSON(PANELS_FILE, panels);
     } catch (e) {
         error('Error saving panels:', e);
     }

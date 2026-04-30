@@ -69,6 +69,12 @@ const client = new Client({
 });
 
 const alertWatch = new Map();
+setInterval(() => {
+  const limit = Date.now() - 24 * 60 * 60 * 1000;
+  for (const [channelId, data] of alertWatch) {
+    if (data.addedAt < limit) alertWatch.delete(channelId);
+  }
+}, 60 * 60 * 1000);
 
 const dataDir = path.join(__dirname, '..', 'data');
 if (!fs.existsSync(dataDir)) {
@@ -1148,35 +1154,29 @@ client.on('interactionCreate', async (interaction) => {
         const targetId = interaction.options.getString('id', true).trim();
         const motif = interaction.commandName === 'banpol' ? interaction.options.getString('motif', true) : null;
         await interaction.deferReply({ ephemeral: true });
-        const results = [];
-        for (const [gid, guild] of interaction.client.guilds.cache) {
-          try {
-            const g = await interaction.client.guilds.fetch(gid);
-            if (interaction.commandName === 'kickpol') {
-              const member = await g.members.fetch(targetId).catch(() => null);
-              if (!member) {
-                results.push({ guild: g, ok: false, reason: 'Utilisateur introuvable' });
-              } else {
-                await member.kick(`kickpol by ${interaction.user.tag}`);
-                results.push({ guild: g, ok: true });
-              }
-            } else {
-              await g.members.ban(targetId, { reason: motif, deleteMessageSeconds: 0 }).catch(async (e) => {
-                try {
-                  await g.bans.create(targetId, { reason: motif });
-                } catch (e2) {
-                  throw e2;
-                }
-              });
-              results.push({ guild: g, ok: true });
-            }
-          } catch (e) {
-            results.push({ guild: guild, ok: false, reason: e?.message || String(e) });
+        const isKick = interaction.commandName === 'kickpol';
+        const guildEntries = [...interaction.client.guilds.cache.entries()];
+
+        const results = await Promise.allSettled(guildEntries.map(async ([gid, guild]) => {
+          const g = await interaction.client.guilds.fetch(gid);
+          if (isKick) {
+            const member = await g.members.fetch(targetId).catch(() => null);
+            if (!member) return { guild: g, ok: false, reason: 'Utilisateur introuvable' };
+            await member.kick(`kickpol by ${interaction.user.tag}`);
+          } else {
+            await g.members.ban(targetId, { reason: motif, deleteMessageSeconds: 0 }).catch(async () => {
+              await g.bans.create(targetId, { reason: motif });
+            });
           }
-        }
-        const okCount = results.filter(r => r.ok).length;
-        const fail = results.filter(r => !r.ok);
-        await interaction.editReply({ content: `Terminé: ${okCount}/${results.length} serveurs.` });
+          return { guild: g, ok: true };
+        }));
+
+        const mapped = results.map((r, i) =>
+          r.status === 'fulfilled' ? r.value : { guild: guildEntries[i][1], ok: false, reason: r.reason?.message || String(r.reason) }
+        );
+        const okCount = mapped.filter(r => r.ok).length;
+        const fail = mapped.filter(r => !r.ok);
+        await interaction.editReply({ content: `Terminé: ${okCount}/${mapped.length} serveurs.` });
 
         const guildId = interaction.guild.id;
         const logId = GuildManager.getGuildConfig(guildId).logs?.policeLogs || process.env.POLICE_LOG_CHANNEL_ID;
@@ -1572,6 +1572,7 @@ client.on('interactionCreate', async (interaction) => {
             PermissionsBitField.Flags.ReadMessageHistory,
             PermissionsBitField.Flags.AttachFiles,
             PermissionsBitField.Flags.EmbedLinks,
+            PermissionsBitField.Flags.UseApplicationCommands,
           ],
         },
       ];
@@ -1586,6 +1587,7 @@ client.on('interactionCreate', async (interaction) => {
             PermissionsBitField.Flags.ReadMessageHistory,
             PermissionsBitField.Flags.AttachFiles,
             PermissionsBitField.Flags.EmbedLinks,
+            PermissionsBitField.Flags.UseApplicationCommands,
           ],
         });
       }
@@ -1798,9 +1800,10 @@ client.on('messageCreate', async (message) => {
         return;
       }
 
-      const set = alertWatch.get(ch.id) || new Set();
-      set.add(message.author.id);
-      alertWatch.set(ch.id, set);
+      const entry = alertWatch.get(ch.id) || { users: new Set(), addedAt: Date.now() };
+      entry.users.add(message.author.id);
+      entry.addedAt = Date.now();
+      alertWatch.set(ch.id, entry);
       await message.reply({ content: '✅ Alerte activée : je vous mentionnerai au prochain message dans ce ticket.' });
       return;
     }
@@ -1887,8 +1890,8 @@ client.on('messageCreate', async (message) => {
     }
 
     const armed = alertWatch.get(ch.id);
-    if (looksLikeTicket && armed && armed.size > 0) {
-      const mentions = Array.from(armed).map(id => `<@${id}>`).join(' ');
+    if (looksLikeTicket && armed && armed.users.size > 0) {
+      const mentions = Array.from(armed.users).map(id => `<@${id}>`).join(' ');
       alertWatch.delete(ch.id);
       await ch.send({ content: `🔔 Nouveau message dans ce ticket. ${mentions}` });
     }

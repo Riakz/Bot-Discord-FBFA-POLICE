@@ -26,6 +26,7 @@ import { saveCandidatureEntry } from '../utils/candidatureStore.js';
 import { sendDoubleAlerts } from './antidouble.js';
 import { isBlacklisted } from '../utils/blacklistManager.js';
 import { getAntidoubleConfig } from '../utils/antidoubleConfig.js';
+import { safeWriteJSON } from '../utils/safeWrite.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -76,7 +77,7 @@ function loadDecisions() {
 
 function saveDecisions() {
   try {
-    fs.writeFileSync(DECISIONS_FILE, JSON.stringify(decisions, null, 2), 'utf8');
+    safeWriteJSON(DECISIONS_FILE, decisions);
   } catch (e) { error('[Candidature] Erreur sauvegarde decisions:', e); }
 }
 

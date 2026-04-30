@@ -34,6 +34,8 @@ export async function handleCreateSlash(interaction) {
         PermissionFlagsBits.AttachFiles,
         PermissionFlagsBits.EmbedLinks,
         PermissionFlagsBits.ManageMessages,
+        PermissionFlagsBits.ManageChannels,
+        PermissionFlagsBits.UseApplicationCommands,
       ],
     },
     {
@@ -44,6 +46,7 @@ export async function handleCreateSlash(interaction) {
         PermissionFlagsBits.ReadMessageHistory,
         PermissionFlagsBits.AttachFiles,
         PermissionFlagsBits.EmbedLinks,
+        PermissionFlagsBits.UseApplicationCommands,
       ],
     },
   ];

@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { safeWriteJSON } from './safeWrite.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,7 +28,7 @@ export function loadWhitelist() {
 
 export function saveWhitelist() {
     try {
-        fs.writeFileSync(WHITELIST_FILE, JSON.stringify(whitelist, null, 2), 'utf8');
+        safeWriteJSON(WHITELIST_FILE, whitelist);
     } catch (e) {
         console.error('Error saving whitelist:', e);
     }
@@ -40,7 +41,6 @@ function ensureGuild(guildId) {
 }
 
 export function addToWhitelist(guildId, id, type = 'user') {
-    loadWhitelist();
     ensureGuild(guildId);
 
     if (type === 'user') {
@@ -60,7 +60,6 @@ export function addToWhitelist(guildId, id, type = 'user') {
 }
 
 export function removeFromWhitelist(guildId, id) {
-    loadWhitelist();
     if (!whitelist[guildId]) return false;
 
     let changed = false;

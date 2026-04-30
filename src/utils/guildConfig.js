@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { log, error } from './logger.js';
+import { safeWriteJSON } from './safeWrite.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -33,7 +34,7 @@ export function loadGuildConfigs() {
 
 export function saveGuildConfigs() {
     try {
-        fs.writeFileSync(GUILD_CONFIG_FILE, JSON.stringify(guildConfigs, null, 2), 'utf8');
+        safeWriteJSON(GUILD_CONFIG_FILE, guildConfigs);
     } catch (e) {
         error('Error saving guild configs:', e);
     }

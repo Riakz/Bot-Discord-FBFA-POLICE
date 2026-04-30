@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { log, error } from './logger.js';
+import { safeWriteJSON } from './safeWrite.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -53,7 +54,7 @@ export function savePlannings() {
   try {
     const dir = path.dirname(DATA_FILE);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(DATA_FILE, JSON.stringify(plannings, null, 2), 'utf8');
+    safeWriteJSON(DATA_FILE, plannings);
   } catch (e) {
     error('[Planning] Erreur sauvegarde plannings:', e);
   }

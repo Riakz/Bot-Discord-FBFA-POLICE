@@ -25,6 +25,7 @@ import {
   removeEntretienReviewerRole,
 } from '../utils/entretienConfig.js';
 import { DISTRICTS } from '../utils/candidatureConfig.js';
+import { safeWriteJSON } from '../utils/safeWrite.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
@@ -44,7 +45,7 @@ function saveEntretienDecisions() {
   try {
     const dir = path.dirname(DECISIONS_FILE);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(DECISIONS_FILE, JSON.stringify(entretienDecisions, null, 2), 'utf8');
+    safeWriteJSON(DECISIONS_FILE, entretienDecisions);
   } catch (e) { error('[Entretien] Erreur sauvegarde decisions:', e); }
 }
 

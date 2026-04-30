@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -27,7 +27,9 @@ export function registerPermsStore() {
 }
 
 export function saveAdmins() {
-  writeFileSync(adminsPath, JSON.stringify({ admins: Array.from(admins) }, null, 2), 'utf-8');
+  const tmp = adminsPath + '.tmp';
+  writeFileSync(tmp, JSON.stringify({ admins: Array.from(admins) }, null, 2), 'utf-8');
+  renameSync(tmp, adminsPath);
 }
 
 export function isAdmin(userId) {

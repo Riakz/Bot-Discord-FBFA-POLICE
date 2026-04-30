@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { log, error } from './logger.js';
+import { safeWriteJSON } from './safeWrite.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,7 +27,7 @@ export function loadBlacklist() {
 
 export function saveBlacklist() {
   try {
-    fs.writeFileSync(BLACKLIST_FILE, JSON.stringify(blacklist, null, 2), 'utf8');
+    safeWriteJSON(BLACKLIST_FILE, blacklist);
   } catch (e) {
     error('Error saving blacklist:', e);
   }

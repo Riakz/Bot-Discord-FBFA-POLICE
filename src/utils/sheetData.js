@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { safeWriteJSON } from './safeWrite.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,7 +25,7 @@ export function loadUserSheets() {
 
 export function saveUserSheets(data) {
     try {
-        fs.writeFileSync(USER_SHEETS_PATH, JSON.stringify(data, null, 2));
+        safeWriteJSON(USER_SHEETS_PATH, data);
     } catch (error) {
         console.error("Error saving user sheets:", error);
     }
