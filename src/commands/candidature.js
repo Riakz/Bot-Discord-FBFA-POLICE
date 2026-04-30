@@ -574,7 +574,7 @@ export async function handleAcceptButton(interaction) {
 
       if (gif) embed.setImage(gif);
 
-      const sentResultMsg = await resultChannel.send({ embeds: [embed] });
+      const sentResultMsg = await resultChannel.send({ content: `<@${existing.candidateId}>`, embeds: [embed] });
       const cur = getDecision(messageId);
       setDecision(messageId, { ...cur, resultMessageId: sentResultMsg.id, resultChannelId: resultId });
     } catch (e) {
@@ -699,7 +699,7 @@ export async function handleRefuseModal(interaction) {
 
       if (gif) embed.setImage(gif);
 
-      const sentResultMsg = await resultChannel.send({ embeds: [embed] });
+      const sentResultMsg = await resultChannel.send({ content: `<@${existing.candidateId}>`, embeds: [embed] });
       const cur = getDecision(messageId);
       setDecision(messageId, { ...cur, resultMessageId: sentResultMsg.id, resultChannelId: resultId });
     } catch (e) {
