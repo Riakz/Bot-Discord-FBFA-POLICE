@@ -15,8 +15,8 @@ import { buildTranscript, extractMeta, setMeta } from './utils/ticketUtils.js';
 import { rateLimiter } from './utils/rateLimit.js';
 import { addToWhitelist, removeFromWhitelist, isWhitelisted, getWhitelist } from './utils/whitelist.js';
 import { handleReserverPA, handleAnnulerPA, handlePlanningPA } from './commands/planning.js';
-import { handleDepartWatcher, hasDepartureKeyword, forwardDepartureMessage } from './commands/watcher.js';
-import { handleMirror, forwardMirrorMessage } from './commands/mirror.js';
+import { handleDepartWatcher, hasDepartureKeyword, forwardDepartureMessage, updateDepartureMessage } from './commands/watcher.js';
+import { handleMirror, forwardMirrorMessage, updateMirrorMessage } from './commands/mirror.js';
 import { getWatcherConfig } from './utils/watcherConfig.js';
 import { handleAntidouble, handleAntidoubleButton, handleAntidoubleModal } from './commands/antidouble.js';
 import { loadBlacklist, saveBlacklist, getBlacklist, addBlacklistEntry, removeBlacklistEntry } from './utils/blacklistManager.js';
@@ -1973,6 +1973,23 @@ client.on('messageCreate', async (message) => {
   const mirrorCfg = getMirrorConfig();
   if (mirrorCfg.mirrors[channelId]) {
     await forwardMirrorMessage(client, message).catch(e => error('[Mirror] forward error:', e));
+  }
+});
+
+client.on('messageUpdate', async (oldMessage, newMessage) => {
+  if (!newMessage.guild || newMessage.author?.bot) return;
+  if (!newMessage.content) return;
+
+  const channelId = newMessage.channel.id;
+
+  const watcherCfg = getWatcherConfig();
+  if (watcherCfg.sourceChannelIds.includes(channelId)) {
+    await updateDepartureMessage(client, oldMessage, newMessage).catch(e => error('[Watcher] update error:', e));
+  }
+
+  const mirrorCfg = getMirrorConfig();
+  if (mirrorCfg.mirrors[channelId]) {
+    await updateMirrorMessage(client, oldMessage, newMessage).catch(e => error('[Mirror] update error:', e));
   }
 });
 

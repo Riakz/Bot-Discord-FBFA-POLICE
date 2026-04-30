@@ -8,6 +8,9 @@ import {
   clearMirror,
 } from '../utils/mirrorConfig.js';
 
+// sourceMessageId → [{channelId, messageId}]
+const mirrorMap = new Map();
+
 export async function forwardMirrorMessage(client, message) {
   const cfg = getMirrorConfig();
   const targets = cfg.mirrors[message.channel.id];
@@ -21,13 +24,34 @@ export async function forwardMirrorMessage(client, message) {
     ? [...message.attachments.values()].map(a => new AttachmentBuilder(a.url, { name: a.name }))
     : [];
 
+  const sent = [];
   for (const targetId of targets) {
     try {
       const ch = await client.channels.fetch(targetId);
       if (!ch?.isTextBased()) continue;
-      await ch.send({ content: text, files });
+      const msg = await ch.send({ content: text, files });
+      sent.push({ channelId: targetId, messageId: msg.id });
     } catch (e) {
       error(`[Mirror] Erreur envoi vers ${targetId}:`, e);
+    }
+  }
+  if (sent.length) mirrorMap.set(message.id, sent);
+}
+
+export async function updateMirrorMessage(client, oldMessage, newMessage) {
+  const mapped = mirrorMap.get(oldMessage.id);
+  if (!mapped?.length) return;
+
+  const displayName = newMessage.member?.displayName ?? newMessage.author?.displayName ?? 'Inconnu';
+  const text = `**${displayName}** : ${newMessage.content || ''}`;
+
+  for (const { channelId, messageId } of mapped) {
+    try {
+      const ch = await client.channels.fetch(channelId);
+      const msg = await ch.messages.fetch(messageId);
+      await msg.edit({ content: text });
+    } catch (e) {
+      error(`[Mirror] Erreur édition vers ${channelId}:`, e);
     }
   }
 }

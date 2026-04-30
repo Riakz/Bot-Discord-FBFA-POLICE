@@ -39,6 +39,9 @@ export function hasDepartureKeyword(text) {
   return DEPARTURE_WORDS.some(w => new RegExp(`\\b${w}\\b`).test(norm));
 }
 
+// sourceMessageId → [{channelId, messageId}]
+const watcherMap = new Map();
+
 export async function forwardDepartureMessage(client, message) {
   const cfg = getWatcherConfig();
   if (!cfg.targetChannelIds.length) return;
@@ -50,13 +53,34 @@ export async function forwardDepartureMessage(client, message) {
     ? [...message.attachments.values()].map(a => new AttachmentBuilder(a.url, { name: a.name }))
     : [];
 
+  const sent = [];
   for (const targetId of cfg.targetChannelIds) {
     try {
       const ch = await client.channels.fetch(targetId);
       if (!ch?.isTextBased()) continue;
-      await ch.send({ content: text, files });
+      const msg = await ch.send({ content: text, files });
+      sent.push({ channelId: targetId, messageId: msg.id });
     } catch (e) {
       error(`[Watcher] Erreur envoi vers ${targetId}:`, e);
+    }
+  }
+  if (sent.length) watcherMap.set(message.id, sent);
+}
+
+export async function updateDepartureMessage(client, oldMessage, newMessage) {
+  const mapped = watcherMap.get(oldMessage.id);
+  if (!mapped?.length) return;
+
+  const content = newMessage.content || '';
+  const text = (content ? content + '\n' : '') + `-# <@${newMessage.author?.id ?? oldMessage.author?.id}>`;
+
+  for (const { channelId, messageId } of mapped) {
+    try {
+      const ch = await client.channels.fetch(channelId);
+      const msg = await ch.messages.fetch(messageId);
+      await msg.edit({ content: text });
+    } catch (e) {
+      error(`[Watcher] Erreur édition vers ${channelId}:`, e);
     }
   }
 }
