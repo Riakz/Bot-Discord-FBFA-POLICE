@@ -192,7 +192,7 @@ export async function processEntretienWebhook(client, message) {
     }
     if (!receptionChannel) receptionChannel = message.channel;
 
-    await receptionChannel.send({ embeds: [embed], components: [row] });
+    await receptionChannel.send({ content: `${candidat || ''}`.trim() || undefined, embeds: [embed], components: [row] });
 
     // Notification automatique vers le salon de réponse (si configuré)
     if (cfg.notifChannelId) {

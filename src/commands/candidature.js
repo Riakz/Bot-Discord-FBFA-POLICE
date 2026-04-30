@@ -465,6 +465,7 @@ export async function handleFormPart2(interaction) {
   let sentMsg;
   try {
     sentMsg = await applicationChannel.send({
+      content: `<@${interaction.user.id}>`,
       embeds: [embed],
       components: [buildDecisionButtons('placeholder')],
     });
