@@ -18,7 +18,7 @@ import { handleReserverPA, handleAnnulerPA, handlePlanningPA } from './commands/
 import { handleDepartWatcher, hasDepartureKeyword, forwardDepartureMessage, updateDepartureMessage } from './commands/watcher.js';
 import { handleMirror, forwardMirrorMessage, updateMirrorMessage } from './commands/mirror.js';
 import { getWatcherConfig } from './utils/watcherConfig.js';
-import { handleAntidouble, handleAntidoubleButton, handleAntidoubleModal } from './commands/antidouble.js';
+import { handleAntidouble, handleAntidoubleButton, handleAntidoubleModal, buildAdBlEmbed, handleBlpa, handleBlpaModal } from './commands/antidouble.js';
 import { loadBlacklist, saveBlacklist, getBlacklist, addBlacklistEntry, removeBlacklistEntry } from './utils/blacklistManager.js';
 import { getMirrorConfig } from './utils/mirrorConfig.js';
 import {
@@ -207,6 +207,7 @@ client.on('interactionCreate', async (interaction) => {
 
     if (interaction.isChatInputCommand()) {
       if (interaction.commandName === 'antidouble') return handleAntidouble(interaction);
+      if (interaction.commandName === 'blpa') return handleBlpa(interaction);
       if (interaction.commandName === 'depart-watcher') return handleDepartWatcher(interaction);
       if (interaction.commandName === 'mirror') return handleMirror(interaction);
 
@@ -747,7 +748,7 @@ client.on('interactionCreate', async (interaction) => {
         }
 
         if (subcommand === 'set-button-log') {
-          const panelId  = interaction.options.getString('panel-id', true);
+          const panelId = interaction.options.getString('panel-id', true);
           const buttonId = interaction.options.getString('button-id', true);
           const channelId = interaction.options.getString('channel-id', true).trim();
           const panel = PanelManager.getPanel(panelId);
@@ -774,7 +775,7 @@ client.on('interactionCreate', async (interaction) => {
         }
 
         if (subcommand === 'set-button-welcome') {
-          const panelId  = interaction.options.getString('panel-id', true);
+          const panelId = interaction.options.getString('panel-id', true);
           const buttonId = interaction.options.getString('button-id', true);
           const panel = PanelManager.getPanel(panelId);
           if (!panel) return interaction.reply({ content: '❌ Panel introuvable.', ephemeral: true });
@@ -1209,15 +1210,35 @@ client.on('interactionCreate', async (interaction) => {
         return openTicketFromPublicPanel(interaction, process.env);
       }
 
-      if (interaction.customId.startsWith('antidbl_ok:') || interaction.customId.startsWith('antidbl_bl:')) {
+      if (interaction.customId.startsWith('antidbl_ok:') || interaction.customId.startsWith('antidbl_bl:') || interaction.customId.startsWith('antidbl_ban:') || interaction.customId.startsWith('antidbl_revert:')) {
         return handleAntidoubleButton(interaction);
+      }
+
+      if (interaction.customId.startsWith('adbl_prev:') || interaction.customId.startsWith('adbl_next:') || interaction.customId === 'adbl_refresh') {
+        if (!isAdmin(interaction.user.id)) {
+          return interaction.reply({ content: '❌ Réservé aux admins du bot.', ephemeral: true });
+        }
+        let page = 0;
+        if (interaction.customId.startsWith('adbl_prev:')) {
+          const curr = Number(interaction.customId.split(':')[1] || '0');
+          page = Math.max(0, curr - 1);
+        } else if (interaction.customId.startsWith('adbl_next:')) {
+          const curr = Number(interaction.customId.split(':')[1] || '0');
+          page = curr + 1;
+        } else {
+          const footer = interaction.message.embeds?.[0]?.footer?.text || '';
+          const match = footer.match(/Page (\d+)\/(\d+)/);
+          if (match) page = Number(match[1]) - 1;
+        }
+        const { embed, row } = await buildAdBlEmbed(interaction.client, page);
+        return interaction.update({ embeds: [embed], components: [row] });
       }
 
       if (interaction.customId.startsWith('entretien_pass:') || interaction.customId.startsWith('entretien_fail:')) {
         return handleEntretienButton(interaction);
       }
       if (interaction.customId.startsWith('entretien_viewreason:')) return handleEntretienViewReason(interaction);
-      if (interaction.customId.startsWith('entretien_revert:'))     return handleEntretienRevert(interaction);
+      if (interaction.customId.startsWith('entretien_revert:')) return handleEntretienRevert(interaction);
 
       if (interaction.customId.startsWith('cand_district:')) return handleDistrictButton(interaction);
       if (interaction.customId.startsWith('cand_part2_btn:')) return handlePart2Button(interaction);
@@ -1252,7 +1273,8 @@ client.on('interactionCreate', async (interaction) => {
       if (interaction.customId.startsWith('ticket_claim:')) return;
       return handleTicketButtons(interaction, process.env);
     } else if (interaction.isModalSubmit()) {
-      if (interaction.customId.startsWith('modal_antidbl_bl:')) return handleAntidoubleModal(interaction);
+      if (interaction.customId.startsWith('modal_antidbl_bl:') || interaction.customId.startsWith('modal_antidbl_ban:')) return handleAntidoubleModal(interaction);
+      if (interaction.customId === 'modal_blpa_add') return handleBlpaModal(interaction);
 
       if (interaction.customId.startsWith('modal_entretien_pass:') || interaction.customId.startsWith('modal_entretien_fail:')) {
         return handleEntretienModal(interaction);
@@ -1513,15 +1535,15 @@ client.on('interactionCreate', async (interaction) => {
       }
 
       if (interaction.customId.startsWith('modal_button_welcome:')) {
-        const parts    = interaction.customId.split(':');
-        const panelId  = parts[1];
+        const parts = interaction.customId.split(':');
+        const panelId = parts[1];
         const buttonId = parts[2];
         const panel = PanelManager.getPanel(panelId);
         if (!panel) return interaction.reply({ content: '❌ Panel introuvable.', ephemeral: true });
         const btn = panel.buttons.find(b => b.id === buttonId);
         if (!btn) return interaction.reply({ content: '❌ Bouton introuvable.', ephemeral: true });
 
-        const title   = interaction.fields.getTextInputValue('welcome_title').trim();
+        const title = interaction.fields.getTextInputValue('welcome_title').trim();
         const message = interaction.fields.getTextInputValue('welcome_message').trim();
         PanelManager.updateButtonWelcome(panelId, buttonId, title || null, message || null);
         return interaction.reply({ content: `✅ Message d'ouverture mis à jour pour le bouton **${btn.label}**.`, ephemeral: true });

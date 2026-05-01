@@ -14,6 +14,7 @@ const FIXED_LINKS = [
   { name: 'Discord Com Police X Pôle Illégal', url: 'https://discord.gg/rCcJKH2dUn' },
   { name: 'Discord Metropolitan Division',     url: 'https://discord.gg/rY9n86Yg5X' },
   { name: 'Discord MDT',                       url: 'https://discord.gg/b3EDry3tAQ' },
+  { name: 'Liste des matricules libres',       url: 'https://docs.google.com/spreadsheets/d/1tUQJCrsg2x0UZFYUfgdBP2WygKRpu0aLhIyuSsOnorA/edit?usp=sharing' },
 ];
 
 export async function handleLiens(interaction) {

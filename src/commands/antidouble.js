@@ -17,9 +17,11 @@ import {
   setBannedRole,
   addOperator,
   removeOperator,
+  addOperatorRole,
+  removeOperatorRole,
   isOperator,
 } from '../utils/antidoubleConfig.js';
-import { addBlacklistEntry, isBlacklisted } from '../utils/blacklistManager.js';
+import { addBlacklistEntry, isBlacklisted, removeBlacklistEntry, getBlacklist } from '../utils/blacklistManager.js';
 
 function norm(str) {
   if (!str) return '';
@@ -219,6 +221,7 @@ export function detectDoubles(newEntry) {
 
   for (const existing of all) {
     if (existing.msgId === newEntry.msgId) continue;
+    if (existing.userId === newEntry.userId) continue;
 
     const matched = CHECKS.filter(c => c.match(newEntry, existing));
     if (!matched.length) continue;
@@ -322,6 +325,11 @@ export async function sendDoubleAlerts(client, newEntry) {
         .setLabel('Blacklister')
         .setEmoji('⛔')
         .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId(`antidbl_ban:${newEntry.userId}`)
+        .setLabel('Blacklister & Bannir')
+        .setEmoji('🔨')
+        .setStyle(ButtonStyle.Danger),
     );
 
     try {
@@ -333,14 +341,16 @@ export async function sendDoubleAlerts(client, newEntry) {
 }
 
 export async function handleAntidoubleButton(interaction) {
-  if (!isOperator(interaction.user.id) && !isAdmin(interaction.user.id)) {
+  if (!isOperator(interaction.member) && !isAdmin(interaction.user.id)) {
     return interaction.reply({
       content: '❌ Vous n\'êtes pas autorisé à interagir avec les alertes anti-double.',
       ephemeral: true,
     });
   }
 
-  const [action, targetUserId] = interaction.customId.split(':');
+  const parts = interaction.customId.split(':');
+  const action = parts[0];
+  const targetUserId = parts[1];
 
   if (action === 'antidbl_ok') {
     const disabledRow = ActionRowBuilder.from(interaction.message.components[0]);
@@ -350,14 +360,22 @@ export async function handleAntidoubleButton(interaction) {
       .setColor(0x2ecc71)
       .setFooter({ text: `✅ Candidature confirmée par ${interaction.user.displayName} • FlashBack FA` });
 
-    await interaction.update({ embeds: [updatedEmbed], components: [disabledRow] });
+    const revertRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`antidbl_revert:${targetUserId}`)
+        .setLabel('Revenir')
+        .setEmoji('🔄')
+        .setStyle(ButtonStyle.Primary)
+    );
+
+    await interaction.update({ embeds: [updatedEmbed], components: [disabledRow, revertRow] });
     return;
   }
 
-  if (action === 'antidbl_bl') {
+  if (action === 'antidbl_bl' || action === 'antidbl_ban') {
     const modal = new ModalBuilder()
-      .setCustomId(`modal_antidbl_bl:${targetUserId}`)
-      .setTitle('Blacklister l\'utilisateur');
+      .setCustomId(`modal_${action}:${targetUserId}`)
+      .setTitle(action === 'antidbl_ban' ? 'Blacklister & Bannir' : 'Blacklister l\'utilisateur');
 
     modal.addComponents(
       new ActionRowBuilder().addComponents(
@@ -383,14 +401,62 @@ export async function handleAntidoubleButton(interaction) {
 
     return interaction.showModal(modal);
   }
+
+  if (action === 'antidbl_revert') {
+    const logMsgId   = parts[2] || null;
+    const logChId    = parts[3] || null;
+
+    const originalEmbed = EmbedBuilder.from(interaction.message.embeds[0])
+      .setColor(0xf1c40f)
+      .setFooter({ text: 'FlashBack FA • Anti-Double Compte' });
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`antidbl_ok:${targetUserId}`)
+        .setLabel('Confirmer la candidature')
+        .setEmoji('✅')
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`antidbl_bl:${targetUserId}`)
+        .setLabel('Blacklister')
+        .setEmoji('⛔')
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId(`antidbl_ban:${targetUserId}`)
+        .setLabel('Blacklister & Bannir')
+        .setEmoji('🔨')
+        .setStyle(ButtonStyle.Danger),
+    );
+
+    removeBlacklistEntry(targetUserId);
+
+    for (const [, guild] of interaction.client.guilds.cache) {
+      try {
+        const g = await interaction.client.guilds.fetch(guild.id);
+        await g.members.unban(targetUserId, 'Annulation de la décision (Antidouble)');
+      } catch { }
+    }
+
+    if (logMsgId && logChId) {
+      try {
+        const logCh = await interaction.client.channels.fetch(logChId);
+        const logMsg = await logCh.messages.fetch(logMsgId);
+        await logMsg.delete();
+      } catch { }
+    }
+
+    await interaction.update({ embeds: [originalEmbed], components: [row] });
+    return;
+  }
 }
 
 export async function handleAntidoubleModal(interaction) {
-  if (!isOperator(interaction.user.id) && !isAdmin(interaction.user.id)) {
+  if (!isOperator(interaction.member) && !isAdmin(interaction.user.id)) {
     return interaction.reply({ content: '❌ Non autorisé.', ephemeral: true });
   }
 
-  const targetUserId = interaction.customId.split(':')[1];
+  const [modalAction, targetUserId] = interaction.customId.split(':');
+  const doBan = modalAction === 'modal_antidbl_ban';
   const rawDuration  = interaction.fields.getTextInputValue('bl_duration').trim();
   const reason       = interaction.fields.getTextInputValue('bl_reason').trim();
 
@@ -409,17 +475,21 @@ export async function handleAntidoubleModal(interaction) {
     addedAt:   Date.now(),
     expiresAt,
     source:    'antidouble',
+    rawDuration,
+    banned:    doBan,
   });
 
   let banCount = 0;
-  for (const [, guild] of interaction.client.guilds.cache) {
-    try {
-      const g = await interaction.client.guilds.fetch(guild.id);
-      await g.members.ban(targetUserId, { reason, deleteMessageSeconds: 0 }).catch(async () => {
-        await g.bans.create(targetUserId, { reason });
-      });
-      banCount++;
-    } catch { }
+  if (doBan) {
+    for (const [, guild] of interaction.client.guilds.cache) {
+      try {
+        const g = await interaction.client.guilds.fetch(guild.id);
+        await g.members.ban(targetUserId, { reason, deleteMessageSeconds: 0 }).catch(async () => {
+          await g.bans.create(targetUserId, { reason });
+        });
+        banCount++;
+      } catch { }
+    }
   }
 
   log(`[Antidouble] Blacklist: ${targetUserId} — ${rawDuration} — ${reason}`);
@@ -427,12 +497,16 @@ export async function handleAntidoubleModal(interaction) {
   const disabledRow = ActionRowBuilder.from(interaction.message.components[0]);
   disabledRow.components.forEach(b => b.setDisabled(true));
 
+  const footerText = doBan 
+    ? `⛔ Blacklisté et banni par ${interaction.user.displayName} • FlashBack FA`
+    : `⛔ Blacklisté par ${interaction.user.displayName} • FlashBack FA`;
+
   const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
     .setColor(0xe74c3c)
-    .setFooter({ text: `⛔ Blacklisté par ${interaction.user.displayName} • FlashBack FA` });
+    .setFooter({ text: footerText });
 
-  await interaction.message.edit({ embeds: [updatedEmbed], components: [disabledRow] }).catch(() => {});
-
+  let logMsgId = '';
+  let logChId  = '';
   const cfg = getAntidoubleConfig();
   if (cfg.blChannelId) {
     try {
@@ -448,11 +522,23 @@ export async function handleAntidoubleModal(interaction) {
           { name: 'Bans appliqués', value: `${banCount} serveur(s)`,                 inline: true },
         )
         .setTimestamp();
-      await blCh.send({ embeds: [blEmbed] });
+      const sentLog = await blCh.send({ embeds: [blEmbed] });
+      logMsgId = sentLog.id;
+      logChId  = blCh.id;
     } catch (e) {
       error('[Antidouble] Erreur envoi log BL:', e);
     }
   }
+
+  const revertRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`antidbl_revert:${targetUserId}:${logMsgId}:${logChId}`)
+      .setLabel('Revenir')
+      .setEmoji('🔄')
+      .setStyle(ButtonStyle.Primary)
+  );
+
+  await interaction.message.edit({ embeds: [updatedEmbed], components: [disabledRow, revertRow] }).catch(() => {});
 }
 
 export async function handleAntidouble(interaction) {
@@ -489,6 +575,9 @@ export async function handleAntidouble(interaction) {
       const ops = cfg.operatorIds.length > 0
         ? cfg.operatorIds.map(id => `<@${id}>`).join(', ')
         : '_Aucun opérateur configuré_';
+      const opsRoles = (cfg.operatorRoles && cfg.operatorRoles.length > 0)
+        ? cfg.operatorRoles.map(id => `<@&${id}>`).join(', ')
+        : '_Aucun rôle opérateur configuré_';
       const embed = new EmbedBuilder()
         .setTitle('🔍 Configuration Anti-Double Compte')
         .setColor(0x9b59b6)
@@ -497,6 +586,7 @@ export async function handleAntidouble(interaction) {
           { name: '📋 Salon logs BL',   value: cfg.blChannelId    ? `<#${cfg.blChannelId}>`    : '❌ Non défini', inline: true },
           { name: '🚫 Rôle banni',      value: cfg.bannedRoleId   ? `<@&${cfg.bannedRoleId}>`  : '❌ Non défini', inline: true },
           { name: '👮 Opérateurs',      value: ops,                                                               inline: false },
+          { name: '🛡️ Rôles Opérateurs', value: opsRoles,                                                          inline: false },
         )
         .setTimestamp();
       return interaction.reply({ embeds: [embed], ephemeral: true });
@@ -524,17 +614,313 @@ export async function handleAntidouble(interaction) {
         ephemeral: true,
       });
     }
+    if (sub === 'add-role') {
+      const role  = interaction.options.getRole('role', true);
+      const added = addOperatorRole(role.id);
+      return interaction.reply({
+        content: added
+          ? `✅ Le rôle <@&${role.id}> peut désormais gérer les alertes anti-double et la blacklist PA.`
+          : `⚠️ Le rôle <@&${role.id}> est déjà opérateur.`,
+        ephemeral: true,
+      });
+    }
+    if (sub === 'remove-role') {
+      const role    = interaction.options.getRole('role', true);
+      const removed = removeOperatorRole(role.id);
+      return interaction.reply({
+        content: removed
+          ? `✅ Le rôle <@&${role.id}> a été retiré de la liste des opérateurs.`
+          : `⚠️ Le rôle <@&${role.id}> n'est pas dans la liste.`,
+        ephemeral: true,
+      });
+    }
     if (sub === 'list') {
       const cfg = getAntidoubleConfig();
       const ops = cfg.operatorIds.length > 0
         ? cfg.operatorIds.map(id => `<@${id}> (\`${id}\`)`).join('\n')
         : '_Aucun opérateur configuré_';
+      const opsRoles = (cfg.operatorRoles && cfg.operatorRoles.length > 0)
+        ? cfg.operatorRoles.map(id => `<@&${id}> (\`${id}\`)`).join('\n')
+        : '_Aucun rôle opérateur configuré_';
       const embed = new EmbedBuilder()
-        .setTitle('👮 Opérateurs Anti-Double')
+        .setTitle('👮 Opérateurs & Rôles')
         .setColor(0x9b59b6)
-        .setDescription(ops)
+        .addFields(
+          { name: '👤 Utilisateurs', value: ops, inline: false },
+          { name: '🛡️ Rôles', value: opsRoles, inline: false }
+        )
         .setTimestamp();
       return interaction.reply({ embeds: [embed], ephemeral: true });
     }
   }
 }
+
+const AD_BL_PAGE_SIZE = 8;
+
+async function buildAdBlEmbed(client, page = 0) {
+  const bl = getBlacklist();
+  const total = bl.length;
+  const pages = Math.max(1, Math.ceil(total / AD_BL_PAGE_SIZE));
+  const p = Math.min(Math.max(0, page), pages - 1);
+  const start = p * AD_BL_PAGE_SIZE;
+  const slice = bl.slice(start, start + AD_BL_PAGE_SIZE);
+
+  const embed = new EmbedBuilder()
+    .setTitle('⛔ Blacklist — Police Academy')
+    .setColor(0xe74c3c)
+    .setFooter({ text: `Page ${p + 1}/${pages} • Total: ${total} entrée(s)` })
+    .setTimestamp(new Date());
+
+  if (slice.length === 0) {
+    embed.setDescription('✅ Aucune entrée dans la blacklist.');
+  } else {
+    const lines = await Promise.all(slice.map(async (e, i) => {
+      const idx = start + i + 1;
+      const when = e.addedAt ? `<t:${Math.floor(e.addedAt / 1000)}:f>` : '—';
+      const expires = e.expiresAt
+        ? `<t:${Math.floor(e.expiresAt / 1000)}:R>`
+        : '**Permanent**';
+      let username = 'Inconnu';
+      try {
+        const user = await client.users.fetch(e.id);
+        username = user.username;
+      } catch { }
+
+      const addedBy = e.addedBy ? `<@${e.addedBy}>` : '—';
+      const duration = e.rawDuration || '—';
+      const banStatus = e.banned ? '🔨 Banni du Discord' : '⛔ Blacklist uniquement';
+
+      return `**#${idx}** — <@${e.id}> (\`${e.id}\`)\n` +
+             `> 👤 @${username}\n` +
+             `> 📝 ${e.motif || '—'}\n` +
+             `> ⏱️ Durée: **${duration}** • Expire: ${expires}\n` +
+             `> 📅 ${when} • ${banStatus}\n` +
+             `> 👮 ${addedBy}` +
+             (e.source ? ` • Source: \`${e.source}\`` : '');
+    }));
+    embed.setDescription(lines.join('\n\n'));
+  }
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`adbl_prev:${p}`)
+      .setLabel('◀️ Précédent')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(p === 0),
+    new ButtonBuilder()
+      .setCustomId(`adbl_next:${p}`)
+      .setLabel('Suivant ▶️')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(p >= pages - 1),
+    new ButtonBuilder()
+      .setCustomId('adbl_refresh')
+      .setLabel('🔄 Actualiser')
+      .setStyle(ButtonStyle.Secondary),
+  );
+
+  return { embed, row, page: p, pages };
+}
+
+export async function handleBlpa(interaction) {
+  const sub = interaction.options.getSubcommand();
+
+  if (sub === 'search') {
+    const userId = interaction.options.getString('user-id', true).trim();
+    const bl = getBlacklist();
+    const entry = bl.find(e => e.id === userId);
+
+    if (!entry) {
+      return interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setTitle('🔍 Résultat de recherche')
+            .setColor(0x2ecc71)
+            .setDescription(`✅ L'utilisateur <@${userId}> (\`${userId}\`) **n'est pas** dans la blacklist Police Academy.`)
+            .setTimestamp(),
+        ],
+        ephemeral: true,
+      });
+    }
+
+    let username = 'Inconnu';
+    try {
+      const user = await interaction.client.users.fetch(entry.id);
+      username = user.username;
+    } catch { }
+
+    const when = entry.addedAt ? `<t:${Math.floor(entry.addedAt / 1000)}:F>` : '—';
+    const expires = entry.expiresAt
+      ? `<t:${Math.floor(entry.expiresAt / 1000)}:F> (<t:${Math.floor(entry.expiresAt / 1000)}:R>)`
+      : '**Permanent**';
+    const duration = entry.rawDuration || '—';
+    const banStatus = entry.banned ? '🔨 **Banni du Discord** + Blacklist' : '⛔ **Blacklist uniquement** (non banni)';
+    const addedBy = entry.addedBy ? `<@${entry.addedBy}>` : '—';
+
+    const embed = new EmbedBuilder()
+      .setTitle('⛔ Blacklist PA — Fiche Utilisateur')
+      .setColor(0xe74c3c)
+      .addFields(
+        { name: '👤 Utilisateur',     value: `<@${entry.id}> (\`${entry.id}\`)\n@${username}`, inline: false },
+        { name: '📝 Motif',           value: entry.motif || '—',                                inline: false },
+        { name: '⏱️ Durée',            value: duration,                                          inline: true },
+        { name: '⏳ Expiration',       value: expires,                                           inline: true },
+        { name: '🛡️ Statut',           value: banStatus,                                         inline: false },
+        { name: '📅 Date d\'ajout',    value: when,                                              inline: true },
+        { name: '👮 Ajouté par',       value: addedBy,                                           inline: true },
+      )
+      .setFooter({ text: `FlashBack FA • Blacklist PA${entry.source ? ` • Source: ${entry.source}` : ''}` })
+      .setTimestamp();
+
+    try {
+      const user = await interaction.client.users.fetch(entry.id);
+      if (user.displayAvatarURL()) {
+        embed.setThumbnail(user.displayAvatarURL({ size: 128 }));
+      }
+    } catch { }
+
+    return interaction.reply({ embeds: [embed], ephemeral: true });
+  }
+
+  if (sub === 'list') {
+    if (!isOperator(interaction.member) && !isAdmin(interaction.user.id)) {
+      return interaction.reply({ content: '❌ Vous devez être opérateur ou admin pour voir la blacklist.', ephemeral: true });
+    }
+    await interaction.deferReply({ ephemeral: true });
+    const { embed, row } = await buildAdBlEmbed(interaction.client, 0);
+    return interaction.editReply({ embeds: [embed], components: [row] });
+  }
+
+  if (sub === 'add') {
+    if (!isOperator(interaction.member) && !isAdmin(interaction.user.id)) {
+      return interaction.reply({ content: '❌ Vous devez être opérateur ou admin pour ajouter à la blacklist.', ephemeral: true });
+    }
+
+    const modal = new ModalBuilder()
+      .setCustomId('modal_blpa_add')
+      .setTitle('Ajouter à la Blacklist PA');
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('blpa_user_id')
+          .setLabel('ID Discord')
+          .setStyle(TextInputStyle.Short)
+          .setPlaceholder('Ex: 123456789012345678')
+          .setRequired(true)
+          .setMaxLength(20)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('blpa_reason')
+          .setLabel('Motif')
+          .setStyle(TextInputStyle.Paragraph)
+          .setPlaceholder('Raison de la blacklist...')
+          .setRequired(true)
+          .setMinLength(5)
+          .setMaxLength(500)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('blpa_duration')
+          .setLabel('Durée (7j, 30j, 6m, 1an, permanent)')
+          .setStyle(TextInputStyle.Short)
+          .setPlaceholder('Ex: 30j  |  permanent')
+          .setRequired(true)
+          .setMaxLength(20)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('blpa_ban')
+          .setLabel('Bannir du Discord ? (oui / non)')
+          .setStyle(TextInputStyle.Short)
+          .setPlaceholder('oui ou non')
+          .setRequired(true)
+          .setMaxLength(3)
+      ),
+    );
+
+    return interaction.showModal(modal);
+  }
+
+  if (sub === 'remove') {
+    if (!isOperator(interaction.member) && !isAdmin(interaction.user.id)) {
+      return interaction.reply({ content: '❌ Vous devez être opérateur ou admin pour retirer quelqu\'un de la blacklist.', ephemeral: true });
+    }
+    const userId = interaction.options.getString('user-id', true).trim();
+    const removed = removeBlacklistEntry(userId);
+    if (!removed) {
+      return interaction.reply({ content: '⚠️ Cet utilisateur n\'est pas dans la blacklist.', ephemeral: true });
+    }
+
+    for (const [, guild] of interaction.client.guilds.cache) {
+      try {
+        const g = await interaction.client.guilds.fetch(guild.id);
+        await g.members.unban(userId, 'Retiré de la blacklist PA');
+      } catch { }
+    }
+
+    log(`[BLPA] Remove: ${userId} — par ${interaction.user.id}`);
+    return interaction.reply({ content: `✅ <@${userId}> (\`${userId}\`) a été retiré de la blacklist PA et débanni des serveurs.`, ephemeral: true });
+  }
+}
+
+export async function handleBlpaModal(interaction) {
+  if (!isOperator(interaction.member) && !isAdmin(interaction.user.id)) {
+    return interaction.reply({ content: '❌ Non autorisé.', ephemeral: true });
+  }
+
+  const userId      = interaction.fields.getTextInputValue('blpa_user_id').trim();
+  const reason      = interaction.fields.getTextInputValue('blpa_reason').trim();
+  const rawDuration = interaction.fields.getTextInputValue('blpa_duration').trim();
+  const banAnswer   = interaction.fields.getTextInputValue('blpa_ban').trim().toLowerCase();
+
+  if (!/^\d{16,20}$/.test(userId)) {
+    return interaction.reply({ content: '❌ ID Discord invalide (doit contenir 16-20 chiffres).', ephemeral: true });
+  }
+
+  await interaction.deferReply({ ephemeral: true });
+
+  const doBan = ['oui', 'o', 'yes', 'y'].includes(banAnswer);
+  const durationMs = parseDuration(rawDuration);
+  const expiresAt  = durationMs ? Date.now() + durationMs : null;
+
+  addBlacklistEntry({
+    id:        userId,
+    motif:     reason,
+    addedBy:   interaction.user.id,
+    addedAt:   Date.now(),
+    expiresAt,
+    source:    'blpa',
+    rawDuration,
+    banned:    doBan,
+  });
+
+  let banCount = 0;
+  if (doBan) {
+    for (const [, guild] of interaction.client.guilds.cache) {
+      try {
+        const g = await interaction.client.guilds.fetch(guild.id);
+        await g.members.ban(userId, { reason, deleteMessageSeconds: 0 }).catch(async () => {
+          await g.bans.create(userId, { reason });
+        });
+        banCount++;
+      } catch { }
+    }
+  }
+
+  log(`[BLPA] Add: ${userId} — ${rawDuration} — ban:${doBan} — ${reason}`);
+
+  const durationLabel = expiresAt
+    ? `<t:${Math.floor(expiresAt / 1000)}:F>`
+    : '**Permanent**';
+  const banLabel = doBan ? `🔨 Banni de ${banCount} serveur(s)` : '⛔ Blacklist uniquement (non banni)';
+
+  return interaction.editReply({
+    content: `✅ <@${userId}> (\`${userId}\`) ajouté à la Blacklist PA.\n` +
+             `> 📝 ${reason}\n` +
+             `> ⏱️ Durée: **${rawDuration}** • Expire: ${durationLabel}\n` +
+             `> ${banLabel}`,
+  });
+}
+
+export { buildAdBlEmbed };

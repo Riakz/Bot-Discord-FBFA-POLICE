@@ -494,8 +494,40 @@ const commands = [
             .setDescription('Retirer un opérateur')
             .addUserOption(opt => opt.setName('user').setDescription('Utilisateur à retirer').setRequired(true))
         )
+        .addSubcommand(sub =>
+          sub.setName('add-role')
+            .setDescription('Autoriser un rôle entier à gérer la blacklist')
+            .addRoleOption(opt => opt.setName('role').setDescription('Rôle à autoriser').setRequired(true))
+        )
+        .addSubcommand(sub =>
+          sub.setName('remove-role')
+            .setDescription('Retirer l\'accès d\'un rôle')
+            .addRoleOption(opt => opt.setName('role').setDescription('Rôle à retirer').setRequired(true))
+        )
         .addSubcommand(sub => sub.setName('list').setDescription('Voir la liste des opérateurs'))
     ),
+
+  new SlashCommandBuilder()
+    .setName('blpa')
+    .setDescription('Gérer la blacklist de la Police Academy')
+    .addSubcommand(sub =>
+      sub.setName('list').setDescription('Afficher la blacklist PA avec pagination')
+    )
+    .addSubcommand(sub =>
+      sub.setName('search')
+        .setDescription('Rechercher un utilisateur dans la blacklist PA')
+        .addStringOption(opt => opt.setName('user-id').setDescription('ID Discord de l\'utilisateur à rechercher').setRequired(true))
+    )
+    .addSubcommand(sub =>
+      sub.setName('add')
+        .setDescription('Ajouter un utilisateur à la blacklist PA (opérateur minimum)')
+    )
+    .addSubcommand(sub =>
+      sub.setName('remove')
+        .setDescription('Retirer un utilisateur de la blacklist PA (opérateur minimum)')
+        .addStringOption(opt => opt.setName('user-id').setDescription('ID Discord de l\'utilisateur').setRequired(true))
+    ),
+
 
   new SlashCommandBuilder()
     .setName('depart-watcher')

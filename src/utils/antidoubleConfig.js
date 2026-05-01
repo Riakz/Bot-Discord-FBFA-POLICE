@@ -13,6 +13,7 @@ let config = {
   blChannelId:    null,
   bannedRoleId:   null,
   operatorIds:    [],
+  operatorRoles:  [],
 };
 
 function save() {
@@ -34,6 +35,7 @@ export function loadAntidoubleConfig() {
         blChannelId:    parsed.blChannelId    ?? null,
         bannedRoleId:   parsed.bannedRoleId   ?? null,
         operatorIds:    parsed.operatorIds    ?? [],
+        operatorRoles:  parsed.operatorRoles  ?? [],
       };
     }
   } catch (e) {
@@ -62,8 +64,39 @@ export function removeOperator(userId) {
   return false;
 }
 
-export function isOperator(userId) {
-  return config.operatorIds.includes(userId);
+export function addOperatorRole(roleId) {
+  if (config.operatorRoles.includes(roleId)) return false;
+  config.operatorRoles.push(roleId);
+  save();
+  return true;
+}
+
+export function removeOperatorRole(roleId) {
+  const prev = config.operatorRoles.length;
+  config.operatorRoles = config.operatorRoles.filter(id => id !== roleId);
+  if (config.operatorRoles.length !== prev) { save(); return true; }
+  return false;
+}
+
+export function isOperator(memberOrUserId) {
+  if (!memberOrUserId) return false;
+  
+  // Si c'est juste un string (userId), on ne peut vérifier que l'ID
+  if (typeof memberOrUserId === 'string') {
+    return config.operatorIds.includes(memberOrUserId);
+  }
+  
+  // Si c'est un objet membre Discord
+  if (memberOrUserId.id) {
+    if (config.operatorIds.includes(memberOrUserId.id)) return true;
+  }
+  
+  // Vérification des rôles si disponible
+  if (memberOrUserId.roles && memberOrUserId.roles.cache) {
+    return config.operatorRoles.some(roleId => memberOrUserId.roles.cache.has(roleId));
+  }
+  
+  return false;
 }
 
 loadAntidoubleConfig();
