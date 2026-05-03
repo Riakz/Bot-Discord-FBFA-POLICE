@@ -35,6 +35,7 @@ export async function handleCreateSlash(interaction) {
         PermissionFlagsBits.EmbedLinks,
         PermissionFlagsBits.ManageMessages,
         PermissionFlagsBits.ManageChannels,
+        PermissionFlagsBits.ManageRoles,
         PermissionFlagsBits.UseApplicationCommands,
       ],
     },

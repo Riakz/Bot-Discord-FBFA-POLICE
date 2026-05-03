@@ -768,6 +768,297 @@ const commands = [
       sub.setName('show').setDescription('Afficher la whitelist actuelle (utilisateurs et rôles)')
     ),
 
+  new SlashCommandBuilder()
+    .setName('fto-ajout')
+    .setDescription('Accepter une candidature FTO et donner les rôles')
+    .addUserOption((opt) =>
+      opt.setName('member').setDescription('Membre à accepter').setRequired(true)
+    ),
+
+  new SlashCommandBuilder()
+    .setName('fto-refus')
+    .setDescription('Refuser une candidature FTO')
+    .addUserOption((opt) =>
+      opt.setName('member').setDescription('Membre à refuser').setRequired(true)
+    ),
+
+  new SlashCommandBuilder()
+    .setName('fto-valider')
+    .setDescription('Confirmer l\'intégration FTO d\'un agent (annule le timer auto-kick)')
+    .addUserOption((opt) =>
+      opt.setName('member').setDescription('Membre à valider').setRequired(true)
+    ),
+
+  new SlashCommandBuilder()
+    .setName('fto-liste')
+    .setDescription('Afficher les agents en période FTO avec leur délai restant')
+    .addIntegerOption((opt) =>
+      opt.setName('page').setDescription('Numéro de page').setRequired(false).setMinValue(1)
+    ),
+
+  new SlashCommandBuilder()
+    .setName('config-fto')
+    .setDescription('Configurer le système FTO (Admins uniquement)')
+    .addSubcommand((sub) =>
+      sub
+        .setName('add-role')
+        .setDescription('Ajouter un rôle attribué lors d\'une acceptation FTO')
+        .addRoleOption((opt) =>
+          opt.setName('role').setDescription('Rôle à ajouter').setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('remove-role')
+        .setDescription('Retirer un rôle FTO')
+        .addRoleOption((opt) =>
+          opt.setName('role').setDescription('Rôle à retirer').setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('set-log')
+        .setDescription('Définir le salon de log des mouvements FTO')
+        .addStringOption((opt) =>
+          opt.setName('channel-id').setDescription('ID du salon').setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('set-pending-days')
+        .setDescription('Définir le délai d\'intégration avant auto-kick (défaut : 20 jours)')
+        .addIntegerOption((opt) =>
+          opt.setName('days').setDescription('Nombre de jours').setRequired(true).setMinValue(1).setMaxValue(60)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub.setName('set-dm-accept').setDescription('Définir le message DM envoyé lors d\'une acceptation (pop-up)')
+    )
+    .addSubcommand((sub) =>
+      sub.setName('set-dm-refus').setDescription('Définir le message DM envoyé lors d\'un refus (pop-up)')
+    )
+    .addSubcommand((sub) =>
+      sub.setName('show').setDescription('Afficher la configuration FTO actuelle')
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('set-cand-reception')
+        .setDescription('Définir le salon de réception des candidatures FTO')
+        .addStringOption((opt) =>
+          opt.setName('channel-id').setDescription('ID du salon').setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('add-cand-examiner')
+        .setDescription('Ajouter un rôle examinateur (mentionné à chaque candidature)')
+        .addRoleOption((opt) =>
+          opt.setName('role').setDescription('Rôle examinateur').setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('remove-cand-examiner')
+        .setDescription('Retirer un rôle examinateur')
+        .addRoleOption((opt) =>
+          opt.setName('role').setDescription('Rôle à retirer').setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('set-cand-cooldown')
+        .setDescription('Définir le cooldown entre deux candidatures FTO')
+        .addIntegerOption((opt) =>
+          opt.setName('hours').setDescription('Cooldown en heures (0 = désactivé)').setRequired(true).setMinValue(0).setMaxValue(720)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub.setName('toggle-cand-blacklist').setDescription('Activer/désactiver la vérification blacklist')
+    )
+    .addSubcommand((sub) =>
+      sub.setName('publish-cand').setDescription('Publier le panel de candidature FTO dans ce salon')
+    )
+    .addSubcommand((sub) =>
+      sub.setName('show-cand').setDescription('Afficher la configuration candidature FTO')
+    ),
+
+  new SlashCommandBuilder()
+    .setName('config-sanction')
+    .setDescription('Configurer le système de tickets sanction automatiques (Admins uniquement)')
+    .addSubcommand((sub) =>
+      sub
+        .setName('set-source')
+        .setDescription('Salon à surveiller pour les notifications de sanction')
+        .addStringOption((opt) =>
+          opt.setName('channel-id').setDescription('ID du salon').setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('set-category')
+        .setDescription('Catégorie où créer les tickets sanction')
+        .addStringOption((opt) =>
+          opt.setName('channel-id').setDescription('ID de la catégorie').setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('add-staff-role')
+        .setDescription('Ajouter un rôle ayant accès aux tickets sanction')
+        .addRoleOption((opt) =>
+          opt.setName('role').setDescription('Rôle à ajouter').setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('remove-staff-role')
+        .setDescription('Retirer un rôle staff')
+        .addRoleOption((opt) =>
+          opt.setName('role').setDescription('Rôle à retirer').setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('add-staff-user')
+        .setDescription('Ajouter un utilisateur fixe ayant accès aux tickets sanction')
+        .addStringOption((opt) =>
+          opt.setName('user-id').setDescription('ID Discord de l\'utilisateur').setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('remove-staff-user')
+        .setDescription('Retirer un utilisateur fixe')
+        .addStringOption((opt) =>
+          opt.setName('user-id').setDescription('ID Discord de l\'utilisateur').setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub.setName('set-contestation').setDescription('Définir le bloc contestation (ouvre une pop-up)')
+    )
+    .addSubcommand((sub) =>
+      sub.setName('set-footer').setDescription('Définir le pied de message (ouvre une pop-up)')
+    )
+    .addSubcommand((sub) =>
+      sub.setName('show').setDescription('Afficher la configuration actuelle')
+    ),
+
+  new SlashCommandBuilder()
+    .setName('form-builder')
+    .setDescription('Gérer les formulaires de candidature personnalisés (Admins uniquement)')
+    .addSubcommand((sub) =>
+      sub.setName('create').setDescription('Créer un nouveau formulaire')
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('add-question')
+        .setDescription('Ajouter une question au formulaire')
+        .addStringOption((opt) =>
+          opt.setName('form-id').setDescription('ID du formulaire').setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('remove-question')
+        .setDescription('Supprimer une question du formulaire')
+        .addStringOption((opt) =>
+          opt.setName('form-id').setDescription('ID du formulaire').setRequired(true)
+        )
+        .addIntegerOption((opt) =>
+          opt.setName('index').setDescription('Numéro de la question (1 à 5)').setRequired(true).setMinValue(1).setMaxValue(5)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('set-reception')
+        .setDescription('Définir le salon de réception des soumissions')
+        .addStringOption((opt) =>
+          opt.setName('form-id').setDescription('ID du formulaire').setRequired(true)
+        )
+        .addStringOption((opt) =>
+          opt.setName('channel-id').setDescription('ID du salon').setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('add-examiner-role')
+        .setDescription('Ajouter un rôle examinateur (mentionné lors des soumissions)')
+        .addStringOption((opt) =>
+          opt.setName('form-id').setDescription('ID du formulaire').setRequired(true)
+        )
+        .addRoleOption((opt) =>
+          opt.setName('role').setDescription('Rôle examinateur').setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('remove-examiner-role')
+        .setDescription('Retirer un rôle examinateur')
+        .addStringOption((opt) =>
+          opt.setName('form-id').setDescription('ID du formulaire').setRequired(true)
+        )
+        .addRoleOption((opt) =>
+          opt.setName('role').setDescription('Rôle à retirer').setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('set-cooldown')
+        .setDescription('Définir le cooldown entre deux soumissions')
+        .addStringOption((opt) =>
+          opt.setName('form-id').setDescription('ID du formulaire').setRequired(true)
+        )
+        .addIntegerOption((opt) =>
+          opt.setName('hours').setDescription('Cooldown en heures (0 = désactivé)').setRequired(true).setMinValue(0).setMaxValue(720)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('toggle-blacklist')
+        .setDescription('Activer/désactiver la vérification blacklist lors des soumissions')
+        .addStringOption((opt) =>
+          opt.setName('form-id').setDescription('ID du formulaire').setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('set-color')
+        .setDescription('Définir la couleur de l\'embed de réception')
+        .addStringOption((opt) =>
+          opt.setName('form-id').setDescription('ID du formulaire').setRequired(true)
+        )
+        .addStringOption((opt) =>
+          opt.setName('color').setDescription('Code couleur hex (ex: 3498db)').setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('publish')
+        .setDescription('Publier le panel du formulaire dans ce salon')
+        .addStringOption((opt) =>
+          opt.setName('form-id').setDescription('ID du formulaire').setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub.setName('list').setDescription('Lister tous les formulaires du serveur')
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('show')
+        .setDescription('Afficher la configuration détaillée d\'un formulaire')
+        .addStringOption((opt) =>
+          opt.setName('form-id').setDescription('ID du formulaire').setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('delete')
+        .setDescription('Supprimer un formulaire (et son panel publié)')
+        .addStringOption((opt) =>
+          opt.setName('form-id').setDescription('ID du formulaire').setRequired(true)
+        )
+    ),
+
   ficheData,
 ].map((c) => c.toJSON());
 

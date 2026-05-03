@@ -246,7 +246,7 @@ export async function sendDoubleAlerts(client, newEntry) {
   const matches = detectDoubles(newEntry);
   if (!matches.length) return;
 
-  const cfg = getAntidoubleConfig();
+  const cfg = getAntidoubleConfig(newEntry.guildId);
   if (!cfg.alertChannelId) return;
 
   let alertCh;
@@ -259,7 +259,7 @@ export async function sendDoubleAlerts(client, newEntry) {
   }
 
   for (const { existing, matched, bonuses, totalScore, level } of matches) {
-    const isBypass   = isBlacklisted(existing.userId);
+    const isBypass   = isBlacklisted(newEntry.guildId, existing.userId);
     const isNewAcct  = isAccountNew(newEntry);
 
     const criteriaList = matched.map(c => `• ${c.label} \`+${c.score}\``).join('\n');
@@ -341,7 +341,7 @@ export async function sendDoubleAlerts(client, newEntry) {
 }
 
 export async function handleAntidoubleButton(interaction) {
-  if (!isOperator(interaction.member) && !isAdmin(interaction.user.id)) {
+  if (!isOperator(interaction.guild.id, interaction.member) && !isAdmin(interaction.user.id)) {
     return interaction.reply({
       content: '❌ Vous n\'êtes pas autorisé à interagir avec les alertes anti-double.',
       ephemeral: true,
@@ -428,7 +428,7 @@ export async function handleAntidoubleButton(interaction) {
         .setStyle(ButtonStyle.Danger),
     );
 
-    removeBlacklistEntry(targetUserId);
+    removeBlacklistEntry(interaction.guild.id, targetUserId);
 
     for (const [, guild] of interaction.client.guilds.cache) {
       try {
@@ -451,7 +451,7 @@ export async function handleAntidoubleButton(interaction) {
 }
 
 export async function handleAntidoubleModal(interaction) {
-  if (!isOperator(interaction.member) && !isAdmin(interaction.user.id)) {
+  if (!isOperator(interaction.guild.id, interaction.member) && !isAdmin(interaction.user.id)) {
     return interaction.reply({ content: '❌ Non autorisé.', ephemeral: true });
   }
 
@@ -468,7 +468,7 @@ export async function handleAntidoubleModal(interaction) {
     ? `<t:${Math.floor(expiresAt / 1000)}:F>`
     : '**Permanent**';
 
-  addBlacklistEntry({
+  addBlacklistEntry(interaction.guild.id, {
     id:        targetUserId,
     motif:     reason,
     addedBy:   interaction.user.id,
@@ -507,7 +507,7 @@ export async function handleAntidoubleModal(interaction) {
 
   let logMsgId = '';
   let logChId  = '';
-  const cfg = getAntidoubleConfig();
+  const cfg = getAntidoubleConfig(interaction.guild.id);
   if (cfg.blChannelId) {
     try {
       const blCh = await interaction.client.channels.fetch(cfg.blChannelId);
@@ -546,23 +546,24 @@ export async function handleAntidouble(interaction) {
     return interaction.reply({ content: '❌ Réservé aux administrateurs du bot.', ephemeral: true });
   }
 
-  const group = interaction.options.getSubcommandGroup();
-  const sub   = interaction.options.getSubcommand();
+  const group   = interaction.options.getSubcommandGroup();
+  const sub     = interaction.options.getSubcommand();
+  const guildId = interaction.guild.id;
 
   if (group === 'config') {
     if (sub === 'set-alert-channel') {
       const id = interaction.options.getString('channel-id', true).trim();
-      setAlertChannel(id);
+      setAlertChannel(guildId, id);
       return interaction.reply({ content: `✅ Salon d'alertes défini : <#${id}>`, ephemeral: true });
     }
     if (sub === 'set-bl-channel') {
       const id = interaction.options.getString('channel-id', true).trim();
-      setBlChannel(id);
+      setBlChannel(guildId, id);
       return interaction.reply({ content: `✅ Salon de logs BL défini : <#${id}>`, ephemeral: true });
     }
     if (sub === 'set-banned-role') {
       const role = interaction.options.getRole('role');
-      setBannedRole(role?.id ?? null);
+      setBannedRole(guildId, role?.id ?? null);
       return interaction.reply({
         content: role
           ? `✅ Rôle banni défini : <@&${role.id}> — les membres avec ce rôle ne peuvent plus postuler.`
@@ -571,7 +572,7 @@ export async function handleAntidouble(interaction) {
       });
     }
     if (sub === 'show') {
-      const cfg = getAntidoubleConfig();
+      const cfg = getAntidoubleConfig(guildId);
       const ops = cfg.operatorIds.length > 0
         ? cfg.operatorIds.map(id => `<@${id}>`).join(', ')
         : '_Aucun opérateur configuré_';
@@ -596,7 +597,7 @@ export async function handleAntidouble(interaction) {
   if (group === 'allow') {
     if (sub === 'add') {
       const user  = interaction.options.getUser('user', true);
-      const added = addOperator(user.id);
+      const added = addOperator(guildId, user.id);
       return interaction.reply({
         content: added
           ? `✅ <@${user.id}> peut désormais gérer les alertes anti-double.`
@@ -606,7 +607,7 @@ export async function handleAntidouble(interaction) {
     }
     if (sub === 'remove') {
       const user    = interaction.options.getUser('user', true);
-      const removed = removeOperator(user.id);
+      const removed = removeOperator(guildId, user.id);
       return interaction.reply({
         content: removed
           ? `✅ <@${user.id}> retiré de la liste des opérateurs.`
@@ -616,7 +617,7 @@ export async function handleAntidouble(interaction) {
     }
     if (sub === 'add-role') {
       const role  = interaction.options.getRole('role', true);
-      const added = addOperatorRole(role.id);
+      const added = addOperatorRole(guildId, role.id);
       return interaction.reply({
         content: added
           ? `✅ Le rôle <@&${role.id}> peut désormais gérer les alertes anti-double et la blacklist PA.`
@@ -626,7 +627,7 @@ export async function handleAntidouble(interaction) {
     }
     if (sub === 'remove-role') {
       const role    = interaction.options.getRole('role', true);
-      const removed = removeOperatorRole(role.id);
+      const removed = removeOperatorRole(guildId, role.id);
       return interaction.reply({
         content: removed
           ? `✅ Le rôle <@&${role.id}> a été retiré de la liste des opérateurs.`
@@ -635,7 +636,7 @@ export async function handleAntidouble(interaction) {
       });
     }
     if (sub === 'list') {
-      const cfg = getAntidoubleConfig();
+      const cfg = getAntidoubleConfig(guildId);
       const ops = cfg.operatorIds.length > 0
         ? cfg.operatorIds.map(id => `<@${id}> (\`${id}\`)`).join('\n')
         : '_Aucun opérateur configuré_';
@@ -657,8 +658,8 @@ export async function handleAntidouble(interaction) {
 
 const AD_BL_PAGE_SIZE = 8;
 
-async function buildAdBlEmbed(client, page = 0) {
-  const bl = getBlacklist();
+async function buildAdBlEmbed(client, page = 0, guildId = null) {
+  const bl = guildId ? getBlacklist(guildId) : [];
   const total = bl.length;
   const pages = Math.max(1, Math.ceil(total / AD_BL_PAGE_SIZE));
   const p = Math.min(Math.max(0, page), pages - 1);
@@ -726,7 +727,7 @@ export async function handleBlpa(interaction) {
 
   if (sub === 'search') {
     const userId = interaction.options.getString('user-id', true).trim();
-    const bl = getBlacklist();
+    const bl = getBlacklist(interaction.guild.id);
     const entry = bl.find(e => e.id === userId);
 
     if (!entry) {
@@ -782,16 +783,16 @@ export async function handleBlpa(interaction) {
   }
 
   if (sub === 'list') {
-    if (!isOperator(interaction.member) && !isAdmin(interaction.user.id)) {
+    if (!isOperator(interaction.guild.id, interaction.member) && !isAdmin(interaction.user.id)) {
       return interaction.reply({ content: '❌ Vous devez être opérateur ou admin pour voir la blacklist.', ephemeral: true });
     }
     await interaction.deferReply({ ephemeral: true });
-    const { embed, row } = await buildAdBlEmbed(interaction.client, 0);
+    const { embed, row } = await buildAdBlEmbed(interaction.client, 0, interaction.guild.id);
     return interaction.editReply({ embeds: [embed], components: [row] });
   }
 
   if (sub === 'add') {
-    if (!isOperator(interaction.member) && !isAdmin(interaction.user.id)) {
+    if (!isOperator(interaction.guild.id, interaction.member) && !isAdmin(interaction.user.id)) {
       return interaction.reply({ content: '❌ Vous devez être opérateur ou admin pour ajouter à la blacklist.', ephemeral: true });
     }
 
@@ -843,11 +844,11 @@ export async function handleBlpa(interaction) {
   }
 
   if (sub === 'remove') {
-    if (!isOperator(interaction.member) && !isAdmin(interaction.user.id)) {
+    if (!isOperator(interaction.guild.id, interaction.member) && !isAdmin(interaction.user.id)) {
       return interaction.reply({ content: '❌ Vous devez être opérateur ou admin pour retirer quelqu\'un de la blacklist.', ephemeral: true });
     }
     const userId = interaction.options.getString('user-id', true).trim();
-    const removed = removeBlacklistEntry(userId);
+    const removed = removeBlacklistEntry(interaction.guild.id, userId);
     if (!removed) {
       return interaction.reply({ content: '⚠️ Cet utilisateur n\'est pas dans la blacklist.', ephemeral: true });
     }
@@ -865,7 +866,7 @@ export async function handleBlpa(interaction) {
 }
 
 export async function handleBlpaModal(interaction) {
-  if (!isOperator(interaction.member) && !isAdmin(interaction.user.id)) {
+  if (!isOperator(interaction.guild.id, interaction.member) && !isAdmin(interaction.user.id)) {
     return interaction.reply({ content: '❌ Non autorisé.', ephemeral: true });
   }
 
@@ -884,7 +885,7 @@ export async function handleBlpaModal(interaction) {
   const durationMs = parseDuration(rawDuration);
   const expiresAt  = durationMs ? Date.now() + durationMs : null;
 
-  addBlacklistEntry({
+  addBlacklistEntry(interaction.guild.id, {
     id:        userId,
     motif:     reason,
     addedBy:   interaction.user.id,
@@ -908,7 +909,7 @@ export async function handleBlpaModal(interaction) {
     }
   }
 
-  log(`[BLPA] Add: ${userId} — ${rawDuration} — ban:${doBan} — ${reason}`);
+  log(`[BLPA] Add: ${userId} — ${rawDuration} — ban:${doBan} — ${reason} — guild:${interaction.guild.id}`);
 
   const durationLabel = expiresAt
     ? `<t:${Math.floor(expiresAt / 1000)}:F>`

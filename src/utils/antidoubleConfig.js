@@ -8,94 +8,100 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DATA_FILE = path.join(__dirname, '..', '..', 'data', 'antidouble-config.json');
 
-let config = {
+const DEFAULT = () => ({
   alertChannelId: null,
   blChannelId:    null,
   bannedRoleId:   null,
   operatorIds:    [],
   operatorRoles:  [],
-};
+});
+
+// { guildId: config }
+let configs = {};
+
+function getConfig(guildId) {
+  if (!configs[guildId]) configs[guildId] = DEFAULT();
+  return configs[guildId];
+}
 
 function save() {
-  try {
-    const dir = path.dirname(DATA_FILE);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    safeWriteJSON(DATA_FILE, config);
-  } catch (e) {
-    error('[AntidoubleConfig] Erreur sauvegarde:', e);
-  }
+  try { safeWriteJSON(DATA_FILE, configs); }
+  catch (e) { error('[AntidoubleConfig] Erreur sauvegarde:', e); }
 }
 
 export function loadAntidoubleConfig() {
   try {
     if (fs.existsSync(DATA_FILE)) {
-      const parsed = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-      config = {
-        alertChannelId: parsed.alertChannelId ?? null,
-        blChannelId:    parsed.blChannelId    ?? null,
-        bannedRoleId:   parsed.bannedRoleId   ?? null,
-        operatorIds:    parsed.operatorIds    ?? [],
-        operatorRoles:  parsed.operatorRoles  ?? [],
-      };
+      const raw = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+      // migration: si l'ancien format était un objet plat (pas de guildId en clé)
+      if (raw && raw.alertChannelId !== undefined) {
+        configs = {}; // ancien format, reset
+      } else {
+        configs = raw ?? {};
+        for (const guildId of Object.keys(configs)) {
+          const d = DEFAULT();
+          const p = configs[guildId];
+          configs[guildId] = {
+            alertChannelId: p.alertChannelId ?? d.alertChannelId,
+            blChannelId:    p.blChannelId    ?? d.blChannelId,
+            bannedRoleId:   p.bannedRoleId   ?? d.bannedRoleId,
+            operatorIds:    p.operatorIds    ?? d.operatorIds,
+            operatorRoles:  p.operatorRoles  ?? d.operatorRoles,
+          };
+        }
+      }
     }
-  } catch (e) {
-    error('[AntidoubleConfig] Erreur chargement:', e);
-  }
-  return config;
+  } catch (e) { error('[AntidoubleConfig] Erreur chargement:', e); }
 }
 
-export const getAntidoubleConfig = () => config;
+export const getAntidoubleConfig = (guildId) => getConfig(guildId);
 
-export function setAlertChannel(id)  { config.alertChannelId = id; save(); }
-export function setBlChannel(id)     { config.blChannelId    = id; save(); }
-export function setBannedRole(id)    { config.bannedRoleId   = id; save(); }
+export function setAlertChannel(guildId, id)  { getConfig(guildId).alertChannelId = id; save(); }
+export function setBlChannel(guildId, id)     { getConfig(guildId).blChannelId = id; save(); }
+export function setBannedRole(guildId, id)    { getConfig(guildId).bannedRoleId = id; save(); }
 
-export function addOperator(userId) {
-  if (config.operatorIds.includes(userId)) return false;
-  config.operatorIds.push(userId);
-  save();
-  return true;
+export function addOperator(guildId, userId) {
+  const c = getConfig(guildId);
+  if (c.operatorIds.includes(userId)) return false;
+  c.operatorIds.push(userId); save(); return true;
 }
 
-export function removeOperator(userId) {
-  const prev = config.operatorIds.length;
-  config.operatorIds = config.operatorIds.filter(id => id !== userId);
-  if (config.operatorIds.length !== prev) { save(); return true; }
+export function removeOperator(guildId, userId) {
+  const c = getConfig(guildId);
+  const prev = c.operatorIds.length;
+  c.operatorIds = c.operatorIds.filter(id => id !== userId);
+  if (c.operatorIds.length !== prev) { save(); return true; }
   return false;
 }
 
-export function addOperatorRole(roleId) {
-  if (config.operatorRoles.includes(roleId)) return false;
-  config.operatorRoles.push(roleId);
-  save();
-  return true;
+export function addOperatorRole(guildId, roleId) {
+  const c = getConfig(guildId);
+  if (c.operatorRoles.includes(roleId)) return false;
+  c.operatorRoles.push(roleId); save(); return true;
 }
 
-export function removeOperatorRole(roleId) {
-  const prev = config.operatorRoles.length;
-  config.operatorRoles = config.operatorRoles.filter(id => id !== roleId);
-  if (config.operatorRoles.length !== prev) { save(); return true; }
+export function removeOperatorRole(guildId, roleId) {
+  const c = getConfig(guildId);
+  const prev = c.operatorRoles.length;
+  c.operatorRoles = c.operatorRoles.filter(id => id !== roleId);
+  if (c.operatorRoles.length !== prev) { save(); return true; }
   return false;
 }
 
-export function isOperator(memberOrUserId) {
+export function isOperator(guildId, memberOrUserId) {
+  const cfg = getConfig(guildId);
   if (!memberOrUserId) return false;
-  
-  // Si c'est juste un string (userId), on ne peut vérifier que l'ID
+
   if (typeof memberOrUserId === 'string') {
-    return config.operatorIds.includes(memberOrUserId);
+    return cfg.operatorIds.includes(memberOrUserId);
   }
-  
-  // Si c'est un objet membre Discord
-  if (memberOrUserId.id) {
-    if (config.operatorIds.includes(memberOrUserId.id)) return true;
+
+  if (memberOrUserId.id && cfg.operatorIds.includes(memberOrUserId.id)) return true;
+
+  if (memberOrUserId.roles?.cache) {
+    return cfg.operatorRoles.some(roleId => memberOrUserId.roles.cache.has(roleId));
   }
-  
-  // Vérification des rôles si disponible
-  if (memberOrUserId.roles && memberOrUserId.roles.cache) {
-    return config.operatorRoles.some(roleId => memberOrUserId.roles.cache.has(roleId));
-  }
-  
+
   return false;
 }
 

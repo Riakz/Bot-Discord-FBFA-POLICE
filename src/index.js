@@ -44,6 +44,36 @@ import {
   handleEntretienRevert,
 } from './commands/entretien.js';
 import { handleLiens, handleConfigLiens } from './commands/liens.js';
+import {
+  handleFtoCandidatureConfig,
+  handleFtoCandStart,
+  handleFtoCandPart1,
+  handleFtoCandContinue,
+  handleFtoCandPart2,
+} from './commands/ftoCandidature.js';
+import {
+  handleFtoAjout,
+  handleFtoRefus,
+  handleFtoValider,
+  handleFtoListe,
+  handleConfigFto,
+  handleFtoDmAcceptModal,
+  handleFtoDmRefusModal,
+  runFtoAutoKick,
+} from './commands/fto.js';
+import {
+  handleConfigSanction,
+  handleSanctionSetContestationModal,
+  handleSanctionSetFooterModal,
+  processSanctionMessage,
+} from './commands/sanction.js';
+import {
+  handleFormBuilder,
+  handleFormCreateModal,
+  handleFormAddQuestionModal,
+  handleFormApply,
+  handleFormSubmit,
+} from './commands/formBuilder.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -121,8 +151,8 @@ async function getUsernameById(client, userId) {
 }
 
 const PAGE_SIZE = 10;
-async function buildBlEmbed(client, page = 0) {
-  const bl = getBlacklist();
+async function buildBlEmbed(client, page = 0, guildId = null) {
+  const bl = guildId ? getBlacklist(guildId) : [];
   const total = bl.length;
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const p = Math.min(Math.max(0, page), pages - 1);
@@ -157,6 +187,9 @@ registerPermsStore();
 
 client.once('ready', () => {
   log(`Logged in as ${client.user.tag}`);
+  // FTO auto-kick check toutes les heures
+  setInterval(() => runFtoAutoKick(client).catch(e => error('[FTO] Auto-kick error:', e)), 60 * 60 * 1000);
+  runFtoAutoKick(client).catch(e => error('[FTO] Auto-kick initial error:', e));
 });
 
 client.on('interactionCreate', async (interaction) => {
@@ -229,6 +262,25 @@ client.on('interactionCreate', async (interaction) => {
       }
       if (interaction.commandName === 'config-liens') {
         return handleConfigLiens(interaction);
+      }
+
+      if (interaction.commandName === 'fto-ajout')   return handleFtoAjout(interaction);
+      if (interaction.commandName === 'fto-refus')   return handleFtoRefus(interaction);
+      if (interaction.commandName === 'fto-valider') return handleFtoValider(interaction);
+      if (interaction.commandName === 'fto-liste')   return handleFtoListe(interaction);
+      if (interaction.commandName === 'config-fto') {
+        const sub = interaction.options.getSubcommand();
+        const candSubs = ['set-cand-reception','add-cand-examiner','remove-cand-examiner','set-cand-cooldown','toggle-cand-blacklist','publish-cand','show-cand'];
+        if (candSubs.includes(sub)) return handleFtoCandidatureConfig(interaction);
+        return handleConfigFto(interaction);
+      }
+
+      if (interaction.commandName === 'config-sanction') {
+        return handleConfigSanction(interaction);
+      }
+
+      if (interaction.commandName === 'form-builder') {
+        return handleFormBuilder(interaction);
       }
 
       if (interaction.commandName === 'whitelist') {
@@ -989,7 +1041,7 @@ client.on('interactionCreate', async (interaction) => {
         }
 
         const targetId = interaction.options.getString('id', true).trim();
-        const entry = getBlacklist().find(e => e.id === targetId);
+        const entry = getBlacklist(interaction.guild.id).find(e => e.id === targetId);
 
         if (entry) {
           const embed = new EmbedBuilder()
@@ -1014,7 +1066,7 @@ client.on('interactionCreate', async (interaction) => {
         if (!isAdmin(interaction.user.id)) {
           return interaction.reply({ content: '❌ Réservé aux admins du bot.', ephemeral: true });
         }
-        const { embed, row } = await buildBlEmbed(interaction.client, 0);
+        const { embed, row } = await buildBlEmbed(interaction.client, 0, interaction.guild.id);
         return interaction.reply({ embeds: [embed], components: [row], ephemeral: false });
       }
 
@@ -1230,7 +1282,7 @@ client.on('interactionCreate', async (interaction) => {
           const match = footer.match(/Page (\d+)\/(\d+)/);
           if (match) page = Number(match[1]) - 1;
         }
-        const { embed, row } = await buildAdBlEmbed(interaction.client, page);
+        const { embed, row } = await buildAdBlEmbed(interaction.client, page, interaction.guild.id);
         return interaction.update({ embeds: [embed], components: [row] });
       }
 
@@ -1263,9 +1315,12 @@ client.on('interactionCreate', async (interaction) => {
           const match = footer.match(/Page (\d+)\/(\d+)/);
           if (match) page = Number(match[1]) - 1;
         }
-        const { embed, row } = await buildBlEmbed(interaction.client, page);
+        const { embed, row } = await buildBlEmbed(interaction.client, page, interaction.guild.id);
         return interaction.update({ embeds: [embed], components: [row] });
       }
+      if (interaction.customId === 'ftocand_start')    return handleFtoCandStart(interaction);
+      if (interaction.customId === 'ftocand_continue') return handleFtoCandContinue(interaction);
+      if (interaction.customId.startsWith('cform_apply:')) return handleFormApply(interaction);
       if (interaction.customId.startsWith('custom_panel_btn:')) return;
       if (interaction.customId.startsWith('ticket_close:')) return;
       if (interaction.customId.startsWith('ticket_close_confirm:')) return;
@@ -1279,6 +1334,19 @@ client.on('interactionCreate', async (interaction) => {
       if (interaction.customId.startsWith('modal_entretien_pass:') || interaction.customId.startsWith('modal_entretien_fail:')) {
         return handleEntretienModal(interaction);
       }
+
+      if (interaction.customId === 'ftocand_part1') return handleFtoCandPart1(interaction);
+      if (interaction.customId === 'ftocand_part2') return handleFtoCandPart2(interaction);
+
+      if (interaction.customId === 'fto_dm_accept_modal') return handleFtoDmAcceptModal(interaction);
+      if (interaction.customId === 'fto_dm_refus_modal') return handleFtoDmRefusModal(interaction);
+
+      if (interaction.customId === 'sanction_set_contestation') return handleSanctionSetContestationModal(interaction);
+      if (interaction.customId === 'sanction_set_footer') return handleSanctionSetFooterModal(interaction);
+
+      if (interaction.customId === 'cform_create_modal') return handleFormCreateModal(interaction);
+      if (interaction.customId.startsWith('cform_add_question:')) return handleFormAddQuestionModal(interaction);
+      if (interaction.customId.startsWith('cform_modal:')) return handleFormSubmit(interaction);
 
       if (interaction.customId === 'modal_cand_panel_setup') return handleCandidaturePanelModal(interaction);
       if (interaction.customId.startsWith('modal_cand_part1:')) return handleFormPart1(interaction);
@@ -1299,7 +1367,7 @@ client.on('interactionCreate', async (interaction) => {
         await interaction.deferReply({ ephemeral: true });
 
         const entry = { id, uniqueId: uniqueId || null, motif: motif.slice(0, 1000), addedBy: interaction.user.id, addedAt: Date.now() };
-        addBlacklistEntry(entry);
+        addBlacklistEntry(interaction.guild.id, entry);
 
         const banResults = await banUserFromAllGuilds(interaction.client, id, motif);
         const okCount = banResults.filter(r => r.ok).length;
@@ -1338,11 +1406,11 @@ client.on('interactionCreate', async (interaction) => {
 
         await interaction.deferReply({ ephemeral: true });
 
-        const removed = getBlacklist().find(e => e.id === id);
+        const removed = getBlacklist(interaction.guild.id).find(e => e.id === id);
         if (!removed) {
           return interaction.editReply({ content: `❌ ID ${id} non trouvé dans la blacklist.` });
         }
-        removeBlacklistEntry(id);
+        removeBlacklistEntry(interaction.guild.id, id);
 
         const unbanResults = await unbanUserFromAllGuilds(interaction.client, id);
         const okCount = unbanResults.filter(r => r.ok).length;
@@ -1606,6 +1674,7 @@ client.on('interactionCreate', async (interaction) => {
             PermissionsBitField.Flags.ViewChannel,
             PermissionsBitField.Flags.SendMessages,
             PermissionsBitField.Flags.ManageChannels,
+            PermissionsBitField.Flags.ManageRoles,
             PermissionsBitField.Flags.ReadMessageHistory,
             PermissionsBitField.Flags.AttachFiles,
             PermissionsBitField.Flags.EmbedLinks,
@@ -1958,18 +2027,17 @@ client.on('messageCreate', async (message) => {
 
 setInterval(async () => {
   const now = Date.now();
-  const expired = getBlacklist().filter(e => e.expiresAt && e.expiresAt <= now);
-  if (!expired.length) return;
-
-  for (const entry of expired) {
-    removeBlacklistEntry(entry.id);
-    for (const [, guild] of client.guilds.cache) {
+  for (const [, guild] of client.guilds.cache) {
+    const guildId = guild.id;
+    const expired = getBlacklist(guildId).filter(e => e.expiresAt && e.expiresAt <= now);
+    for (const entry of expired) {
+      removeBlacklistEntry(guildId, entry.id);
       try {
-        const g = await client.guilds.fetch(guild.id);
+        const g = await client.guilds.fetch(guildId);
         await g.members.unban(entry.id, 'Blacklist expirée').catch(() => { });
       } catch { }
+      log(`[AutoUnban] ${entry.id} débanni — blacklist expirée (guild: ${guildId})`);
     }
-    log(`[AutoUnban] ${entry.id} débanni — blacklist expirée`);
   }
 }, 10 * 60 * 1000);
 
@@ -1996,6 +2064,8 @@ client.on('messageCreate', async (message) => {
   if (mirrorCfg.mirrors[channelId]) {
     await forwardMirrorMessage(client, message).catch(e => error('[Mirror] forward error:', e));
   }
+
+  await processSanctionMessage(client, message).catch(e => error('[Sanction] message error:', e));
 });
 
 client.on('messageUpdate', async (oldMessage, newMessage) => {

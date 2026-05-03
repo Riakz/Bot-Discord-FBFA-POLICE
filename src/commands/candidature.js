@@ -236,14 +236,14 @@ export async function handleDistrictButton(interaction) {
   const districtKey = interaction.customId.split(':')[1];
   if (!DISTRICTS[districtKey]) return;
 
-  if (isBlacklisted(interaction.user.id)) {
+  if (isBlacklisted(interaction.guild.id, interaction.user.id)) {
     return interaction.reply({
       content: '❌ Vous êtes blacklisté et ne pouvez pas postuler.',
       ephemeral: true,
     });
   }
 
-  const adCfg = getAntidoubleConfig();
+  const adCfg = getAntidoubleConfig(interaction.guild.id);
   if (adCfg.bannedRoleId && interaction.member.roles.cache.has(adCfg.bannedRoleId)) {
     return interaction.reply({
       content: '❌ Vous n\'êtes pas autorisé à postuler.',
