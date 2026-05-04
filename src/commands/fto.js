@@ -28,7 +28,7 @@ async function sendFtoLog(client, guildId, type, userId) {
     if (!ch?.isTextBased()) return;
     const content = type === 'accept'
       ? `# Field Training Opérations <:ftoLogo:1399709276351762554>\n\n- <@${userId}>`
-      : `# Field Training Opérations :x:\n\n- <@${userId}>`;
+      : `# Field Training Opérations :x:\n\n<@${userId}>`;
     await ch.send({ content });
   } catch (e) {
     error('[FTO] Erreur envoi log:', e);
@@ -96,12 +96,19 @@ export async function handleFtoRefus(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
   try {
+    for (const roleId of cfg.roleIds) {
+      await target.roles.remove(roleId).catch(e => error(`[FTO] Retrait rôle ${roleId}:`, e));
+    }
+
     if (cfg.dmRefus) {
       try {
         await target.send({ content: cfg.dmRefus.replace('{mention}', `<@${target.id}>`).replace('{username}', target.displayName) });
       } catch { }
     }
-    return interaction.editReply({ content: `✅ <@${target.id}> notifié(e) du refus.` });
+
+    await sendFtoLog(interaction.client, guildId, 'refuse', target.id);
+
+    return interaction.editReply({ content: `✅ Rôles retirés et <@${target.id}> notifié(e) du refus.` });
   } catch (e) {
     error('[FTO] Erreur refus:', e);
     return interaction.editReply({ content: `❌ Erreur: ${e.message}` });

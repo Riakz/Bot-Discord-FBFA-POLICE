@@ -182,8 +182,9 @@ function normalizeName(name) {
     .slice(0, 80) || 'agent';
 }
 
-function buildTicketMessage(agentId, sourceContent, cfg) {
-  const parts = [`<@${agentId}>`, '', '📌 **NOTIFICATION SANCTION DISCIPLINAIRE**', '', sourceContent.trim()];
+function buildTicketMessage(agentIds, sourceContent, cfg) {
+  const mentions = agentIds.map(id => `<@${id}>`).join(' ');
+  const parts = [mentions, '', '📌 **NOTIFICATION SANCTION DISCIPLINAIRE**', '', sourceContent.trim()];
   if (cfg.contestationText) parts.push('', '📩 **Contestation**', '', cfg.contestationText.trim());
   if (cfg.footerText) parts.push('', '---', '', cfg.footerText.trim());
   else parts.push('', '-# Ce ticket restera ouvert **48h**. Passé ce délai, il est possible qu\'il soit supprimé.');
@@ -203,66 +204,70 @@ export async function processSanctionMessage(client, message) {
   const agentIds = extractAgentIds(message.content);
   if (agentIds.length === 0) return;
 
-  for (const agentId of agentIds) {
-    try {
-      const member = await message.guild.members.fetch(agentId).catch(() => null);
-      const displayName = member?.displayName ?? member?.user.username ?? agentId;
-      const ticketName = `sanction-${normalizeName(displayName)}`;
+  try {
+    // Nom du ticket : premier agent + nombre si plusieurs
+    const firstMember = await message.guild.members.fetch(agentIds[0]).catch(() => null);
+    const firstName = firstMember?.displayName ?? firstMember?.user.username ?? agentIds[0];
+    const suffix = agentIds.length > 1 ? `+${agentIds.length - 1}` : '';
+    const ticketName = `sanction-${normalizeName(firstName)}${suffix}`;
 
-      const permissionOverwrites = [
-        { id: message.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-        {
-          id: agentId,
-          allow: [
-            PermissionsBitField.Flags.ViewChannel,
-            PermissionsBitField.Flags.SendMessages,
-            PermissionsBitField.Flags.ReadMessageHistory,
-            PermissionsBitField.Flags.AttachFiles,
-            PermissionsBitField.Flags.EmbedLinks,
-          ],
-        },
-      ];
+    const permissionOverwrites = [
+      { id: message.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+    ];
 
-      for (const roleId of cfg.staffRoleIds) {
-        permissionOverwrites.push({
-          id: roleId,
-          allow: [
-            PermissionsBitField.Flags.ViewChannel,
-            PermissionsBitField.Flags.SendMessages,
-            PermissionsBitField.Flags.ManageChannels,
-            PermissionsBitField.Flags.ManageRoles,
-            PermissionsBitField.Flags.ReadMessageHistory,
-            PermissionsBitField.Flags.AttachFiles,
-            PermissionsBitField.Flags.EmbedLinks,
-          ],
-        });
-      }
-
-      for (const userId of cfg.staffUserIds) {
-        permissionOverwrites.push({
-          id: userId,
-          allow: [
-            PermissionsBitField.Flags.ViewChannel,
-            PermissionsBitField.Flags.SendMessages,
-            PermissionsBitField.Flags.ManageChannels,
-            PermissionsBitField.Flags.ManageRoles,
-            PermissionsBitField.Flags.ReadMessageHistory,
-            PermissionsBitField.Flags.AttachFiles,
-            PermissionsBitField.Flags.EmbedLinks,
-          ],
-        });
-      }
-
-      const ticketChannel = await message.guild.channels.create({
-        name: ticketName,
-        type: 0,
-        parent: cfg.categoryId,
-        permissionOverwrites,
+    // Accès pour chaque agent mentionné
+    for (const agentId of agentIds) {
+      permissionOverwrites.push({
+        id: agentId,
+        allow: [
+          PermissionsBitField.Flags.ViewChannel,
+          PermissionsBitField.Flags.SendMessages,
+          PermissionsBitField.Flags.ReadMessageHistory,
+          PermissionsBitField.Flags.AttachFiles,
+          PermissionsBitField.Flags.EmbedLinks,
+        ],
       });
-
-      await ticketChannel.send({ content: buildTicketMessage(agentId, message.content, cfg) });
-    } catch (e) {
-      error(`[Sanction] Erreur création ticket pour ${agentId}:`, e);
     }
+
+    for (const roleId of cfg.staffRoleIds) {
+      permissionOverwrites.push({
+        id: roleId,
+        allow: [
+          PermissionsBitField.Flags.ViewChannel,
+          PermissionsBitField.Flags.SendMessages,
+          PermissionsBitField.Flags.ManageChannels,
+          PermissionsBitField.Flags.ManageRoles,
+          PermissionsBitField.Flags.ReadMessageHistory,
+          PermissionsBitField.Flags.AttachFiles,
+          PermissionsBitField.Flags.EmbedLinks,
+        ],
+      });
+    }
+
+    for (const userId of cfg.staffUserIds) {
+      permissionOverwrites.push({
+        id: userId,
+        allow: [
+          PermissionsBitField.Flags.ViewChannel,
+          PermissionsBitField.Flags.SendMessages,
+          PermissionsBitField.Flags.ManageChannels,
+          PermissionsBitField.Flags.ManageRoles,
+          PermissionsBitField.Flags.ReadMessageHistory,
+          PermissionsBitField.Flags.AttachFiles,
+          PermissionsBitField.Flags.EmbedLinks,
+        ],
+      });
+    }
+
+    const ticketChannel = await message.guild.channels.create({
+      name: ticketName,
+      type: 0,
+      parent: cfg.categoryId,
+      permissionOverwrites,
+    });
+
+    await ticketChannel.send({ content: buildTicketMessage(agentIds, message.content, cfg) });
+  } catch (e) {
+    error('[Sanction] Erreur création ticket:', e);
   }
 }
