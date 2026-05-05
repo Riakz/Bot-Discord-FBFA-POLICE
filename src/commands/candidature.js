@@ -26,6 +26,7 @@ import { saveCandidatureEntry } from '../utils/candidatureStore.js';
 import { sendDoubleAlerts } from './antidouble.js';
 import { isBlacklisted } from '../utils/blacklistManager.js';
 import { getAntidoubleConfig } from '../utils/antidoubleConfig.js';
+import { getEntretienConfig } from '../utils/entretienConfig.js';
 import { safeWriteJSON } from '../utils/safeWrite.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -247,6 +248,23 @@ export async function handleDistrictButton(interaction) {
   if (adCfg.bannedRoleId && interaction.member.roles.cache.has(adCfg.bannedRoleId)) {
     return interaction.reply({
       content: '❌ Vous n\'êtes pas autorisé à postuler.',
+      ephemeral: true,
+    });
+  }
+
+  // Bloquer si l'utilisateur a déjà un rôle d'acceptation (candidature ou entretien)
+  const candCfg = getCandidatureConfig(interaction.guild.id);
+  const entretienCfg = getEntretienConfig(interaction.guild.id);
+  const acceptedRoleIds = new Set();
+  for (const district of Object.values(candCfg.districts ?? {})) {
+    if (district.acceptedRoleId) acceptedRoleIds.add(district.acceptedRoleId);
+  }
+  for (const roleId of Object.values(entretienCfg.rolesPassedByDistrict ?? {})) {
+    if (roleId) acceptedRoleIds.add(roleId);
+  }
+  if ([...acceptedRoleIds].some(roleId => interaction.member.roles.cache.has(roleId))) {
+    return interaction.reply({
+      content: '❌ Vous faites déjà partie d\'un district. Vous devez perdre votre rôle actuel avant de pouvoir postuler à nouveau.',
       ephemeral: true,
     });
   }
