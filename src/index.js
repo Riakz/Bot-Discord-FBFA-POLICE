@@ -67,6 +67,7 @@ import {
   handleSanctionSetFooterModal,
   processSanctionMessage,
 } from './commands/sanction.js';
+import { loadSanctionTickets, getExpiredSanctionTickets, removeSanctionTicket } from './utils/sanctionTickets.js';
 import {
   handleFormBuilder,
   handleFormCreateModal,
@@ -185,11 +186,26 @@ async function buildBlEmbed(client, page = 0, guildId = null) {
 
 registerPermsStore();
 
+async function runSanctionAutoClose(client) {
+  const expired = getExpiredSanctionTickets();
+  for (const ticket of expired) {
+    try {
+      const ch = await client.channels.fetch(ticket.channelId).catch(() => null);
+      if (ch) await ch.delete('Ticket sanction — 48h écoulées');
+    } catch { }
+    removeSanctionTicket(ticket.channelId);
+  }
+}
+
 client.once('ready', () => {
   log(`Logged in as ${client.user.tag}`);
+  loadSanctionTickets();
   // FTO auto-kick check toutes les heures
   setInterval(() => runFtoAutoKick(client).catch(e => error('[FTO] Auto-kick error:', e)), 60 * 60 * 1000);
   runFtoAutoKick(client).catch(e => error('[FTO] Auto-kick initial error:', e));
+  // Sanction auto-close check toutes les 10 minutes
+  setInterval(() => runSanctionAutoClose(client).catch(e => error('[Sanction] Auto-close error:', e)), 10 * 60 * 1000);
+  runSanctionAutoClose(client).catch(e => error('[Sanction] Auto-close initial error:', e));
 });
 
 client.on('interactionCreate', async (interaction) => {

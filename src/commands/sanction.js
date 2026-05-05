@@ -13,6 +13,9 @@ import {
   removeStaffUser,
   getAllSanctionConfigs,
 } from '../utils/sanctionConfig.js';
+import { addSanctionTicket } from '../utils/sanctionTickets.js';
+
+const TICKET_TTL_MS = 48 * 60 * 60 * 1000;
 
 // ─── Config slash handler ─────────────────────────────────────────────────────
 
@@ -184,10 +187,12 @@ function normalizeName(name) {
 
 function buildTicketMessage(agentIds, sourceContent, cfg) {
   const mentions = agentIds.map(id => `<@${id}>`).join(' ');
+  const closeTs = Math.floor((Date.now() + 48 * 60 * 60 * 1000) / 1000);
   const parts = [mentions, '', '📌 **NOTIFICATION SANCTION DISCIPLINAIRE**', '', sourceContent.trim()];
   if (cfg.contestationText) parts.push('', '📩 **Contestation**', '', cfg.contestationText.trim());
   if (cfg.footerText) parts.push('', '---', '', cfg.footerText.trim());
   else parts.push('', '-# Ce ticket restera ouvert **48h**. Passé ce délai, il est possible qu\'il soit supprimé.');
+  parts.push('', `-# 🔒 Fermeture prévue : <t:${closeTs}:F> (<t:${closeTs}:R>)`);
   return parts.join('\n');
 }
 
@@ -205,11 +210,9 @@ export async function processSanctionMessage(client, message) {
   if (agentIds.length === 0) return;
 
   try {
-    // Nom du ticket : premier agent + nombre si plusieurs
     const firstMember = await message.guild.members.fetch(agentIds[0]).catch(() => null);
     const firstName = firstMember?.displayName ?? firstMember?.user.username ?? agentIds[0];
-    const suffix = agentIds.length > 1 ? `+${agentIds.length - 1}` : '';
-    const ticketName = `sanction-${normalizeName(firstName)}${suffix}`;
+    const ticketName = `sanction-${normalizeName(firstName)}`;
 
     const permissionOverwrites = [
       { id: message.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
@@ -266,7 +269,9 @@ export async function processSanctionMessage(client, message) {
       permissionOverwrites,
     });
 
+    const closeAt = Date.now() + TICKET_TTL_MS;
     await ticketChannel.send({ content: buildTicketMessage(agentIds, message.content, cfg) });
+    addSanctionTicket(guildId, ticketChannel.id, closeAt);
   } catch (e) {
     error('[Sanction] Erreur création ticket:', e);
   }
