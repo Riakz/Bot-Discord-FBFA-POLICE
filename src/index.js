@@ -75,6 +75,8 @@ import {
   handleFormApply,
   handleFormSubmit,
 } from './commands/formBuilder.js';
+import { handleRefCommand } from './commands/ref.js';
+import { loadRefConfig } from './utils/refConfig.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -200,6 +202,7 @@ async function runSanctionAutoClose(client) {
 client.once('ready', () => {
   log(`Logged in as ${client.user.tag}`);
   loadSanctionTickets();
+  loadRefConfig();
   // FTO auto-kick check toutes les heures
   setInterval(() => runFtoAutoKick(client).catch(e => error('[FTO] Auto-kick error:', e)), 60 * 60 * 1000);
   runFtoAutoKick(client).catch(e => error('[FTO] Auto-kick initial error:', e));
@@ -2082,6 +2085,10 @@ client.on('messageCreate', async (message) => {
   }
 
   await processSanctionMessage(client, message).catch(e => error('[Sanction] message error:', e));
+
+  if (message.content?.startsWith('+')) {
+    await handleRefCommand(message).catch(e => error('[Ref] message error:', e));
+  }
 });
 
 client.on('messageUpdate', async (oldMessage, newMessage) => {

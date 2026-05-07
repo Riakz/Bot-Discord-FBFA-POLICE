@@ -321,12 +321,12 @@ export async function sendDoubleAlerts(client, newEntry) {
         .setEmoji('✅')
         .setStyle(ButtonStyle.Success),
       new ButtonBuilder()
-        .setCustomId(`antidbl_bl:${newEntry.userId}`)
+        .setCustomId(`antidbl_bl:${newEntry.userId}:${existing.userId}`)
         .setLabel('Blacklister')
         .setEmoji('⛔')
         .setStyle(ButtonStyle.Danger),
       new ButtonBuilder()
-        .setCustomId(`antidbl_ban:${newEntry.userId}`)
+        .setCustomId(`antidbl_ban:${newEntry.userId}:${existing.userId}`)
         .setLabel('Blacklister & Bannir')
         .setEmoji('🔨')
         .setStyle(ButtonStyle.Danger),
@@ -349,8 +349,9 @@ export async function handleAntidoubleButton(interaction) {
   }
 
   const parts = interaction.customId.split(':');
-  const action = parts[0];
-  const targetUserId = parts[1];
+  const action        = parts[0];
+  const targetUserId  = parts[1];
+  const existingUserId = parts[2] || null;
 
   if (action === 'antidbl_ok') {
     const disabledRow = ActionRowBuilder.from(interaction.message.components[0]);
@@ -374,7 +375,7 @@ export async function handleAntidoubleButton(interaction) {
 
   if (action === 'antidbl_bl' || action === 'antidbl_ban') {
     const modal = new ModalBuilder()
-      .setCustomId(`modal_${action}:${targetUserId}`)
+      .setCustomId(`modal_${action}:${targetUserId}:${existingUserId || ''}`)
       .setTitle(action === 'antidbl_ban' ? 'Blacklister & Bannir' : 'Blacklister l\'utilisateur');
 
     modal.addComponents(
@@ -455,7 +456,10 @@ export async function handleAntidoubleModal(interaction) {
     return interaction.reply({ content: '❌ Non autorisé.', ephemeral: true });
   }
 
-  const [modalAction, targetUserId] = interaction.customId.split(':');
+  const parts2       = interaction.customId.split(':');
+  const modalAction  = parts2[0];
+  const targetUserId = parts2[1];
+  const existingUserId = parts2[2] || null;
   const doBan = modalAction === 'modal_antidbl_ban';
   const rawDuration  = interaction.fields.getTextInputValue('bl_duration').trim();
   const reason       = interaction.fields.getTextInputValue('bl_reason').trim();
@@ -468,31 +472,46 @@ export async function handleAntidoubleModal(interaction) {
     ? `<t:${Math.floor(expiresAt / 1000)}:F>`
     : '**Permanent**';
 
-  addBlacklistEntry(interaction.guild.id, {
-    id:        targetUserId,
-    motif:     reason,
-    addedBy:   interaction.user.id,
-    addedAt:   Date.now(),
-    expiresAt,
-    source:    'antidouble',
-    rawDuration,
-    banned:    doBan,
-  });
+  const allTargets = [targetUserId, existingUserId].filter(Boolean);
 
+  // Blacklister les deux comptes
+  for (const uid of allTargets) {
+    addBlacklistEntry(interaction.guild.id, {
+      id:        uid,
+      motif:     reason,
+      addedBy:   interaction.user.id,
+      addedAt:   Date.now(),
+      expiresAt,
+      source:    'antidouble',
+      rawDuration,
+      banned:    doBan,
+    });
+  }
+
+  // Assigner le bannedRoleId aux deux comptes + bannir si demandé
+  const cfg2 = getAntidoubleConfig(interaction.guild.id);
   let banCount = 0;
-  if (doBan) {
-    for (const [, guild] of interaction.client.guilds.cache) {
+  for (const uid of allTargets) {
+    if (cfg2.bannedRoleId) {
       try {
-        const g = await interaction.client.guilds.fetch(guild.id);
-        await g.members.ban(targetUserId, { reason, deleteMessageSeconds: 0 }).catch(async () => {
-          await g.bans.create(targetUserId, { reason });
-        });
-        banCount++;
+        const m = await interaction.guild.members.fetch(uid).catch(() => null);
+        if (m) await m.roles.add(cfg2.bannedRoleId).catch(() => {});
       } catch { }
+    }
+    if (doBan) {
+      for (const [, guild] of interaction.client.guilds.cache) {
+        try {
+          const g = await interaction.client.guilds.fetch(guild.id);
+          await g.members.ban(uid, { reason, deleteMessageSeconds: 0 }).catch(async () => {
+            await g.bans.create(uid, { reason });
+          });
+          banCount++;
+        } catch { }
+      }
     }
   }
 
-  log(`[Antidouble] Blacklist: ${targetUserId} — ${rawDuration} — ${reason}`);
+  log(`[Antidouble] Blacklist: ${allTargets.join(', ')} — ${rawDuration} — ${reason}`);
 
   const disabledRow = ActionRowBuilder.from(interaction.message.components[0]);
   disabledRow.components.forEach(b => b.setDisabled(true));
@@ -507,19 +526,19 @@ export async function handleAntidoubleModal(interaction) {
 
   let logMsgId = '';
   let logChId  = '';
-  const cfg = getAntidoubleConfig(interaction.guild.id);
-  if (cfg.blChannelId) {
+  if (cfg2.blChannelId) {
     try {
-      const blCh = await interaction.client.channels.fetch(cfg.blChannelId);
+      const blCh = await interaction.client.channels.fetch(cfg2.blChannelId);
+      const usersValue = allTargets.map(uid => `<@${uid}> (\`${uid}\`)`).join('\n');
       const blEmbed = new EmbedBuilder()
         .setTitle('⛔ Blacklist — Anti-Double Compte')
         .setColor(0xe74c3c)
         .addFields(
-          { name: 'Utilisateur',  value: `<@${targetUserId}> (\`${targetUserId}\`)`, inline: true },
-          { name: 'Ajouté par',   value: `<@${interaction.user.id}>`,                inline: true },
-          { name: 'Durée',        value: durationLabel,                               inline: true },
-          { name: 'Raison',       value: reason,                                      inline: false },
-          { name: 'Bans appliqués', value: `${banCount} serveur(s)`,                 inline: true },
+          { name: 'Comptes visés', value: usersValue,                                  inline: false },
+          { name: 'Ajouté par',    value: `<@${interaction.user.id}>`,                 inline: true },
+          { name: 'Durée',         value: durationLabel,                               inline: true },
+          { name: 'Raison',        value: reason,                                      inline: false },
+          { name: 'Bans appliqués', value: `${banCount} serveur(s)`,                  inline: true },
         )
         .setTimestamp();
       const sentLog = await blCh.send({ embeds: [blEmbed] });

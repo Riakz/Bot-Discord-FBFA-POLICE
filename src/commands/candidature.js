@@ -269,6 +269,17 @@ export async function handleDistrictButton(interaction) {
     });
   }
 
+  // Bloquer si candidature en attente
+  const hasPending = Object.values(decisions).some(
+    dec => dec.candidateId === interaction.user.id && dec.status === 'pending'
+  );
+  if (hasPending) {
+    return interaction.reply({
+      content: '❌ Vous avez déjà une candidature en cours d\'examen. Veuillez attendre une décision avant de postuler à nouveau.',
+      ephemeral: true,
+    });
+  }
+
   const now = Date.now();
   for (const dec of Object.values(decisions)) {
     if (dec.candidateId === interaction.user.id && dec.status === 'refused') {
